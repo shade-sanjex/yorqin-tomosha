@@ -39,7 +39,7 @@ export function usePeerMesh({ roomId, userId, enabled }: UsePeerMeshArgs) {
   const channelRef = useRef<RealtimeChannel | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const analysersRef = useRef<Record<string, { analyser: AnalyserNode; data: Uint8Array }>>({});
+  const analysersRef = useRef<Record<string, { analyser: AnalyserNode; data: Uint8Array<ArrayBuffer> }>>({});
   const rafRef = useRef<number | null>(null);
 
   const sendSignal = useCallback((p: Omit<SignalPayload, "from">) => {
@@ -58,7 +58,7 @@ export function usePeerMesh({ roomId, userId, enabled }: UsePeerMeshArgs) {
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 512;
       src.connect(analyser);
-      analysersRef.current[peerId] = { analyser, data: new Uint8Array(analyser.frequencyBinCount) };
+      analysersRef.current[peerId] = { analyser, data: new Uint8Array(new ArrayBuffer(analyser.frequencyBinCount)) };
     } catch {
       // ignore
     }
