@@ -14,16 +14,136 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      chat_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          room_id: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          room_id: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          room_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string
+          id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name: string
+          id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      room_participants: {
+        Row: {
+          joined_at: string
+          room_id: string
+          status: Database["public"]["Enums"]["participant_status"]
+          user_id: string
+        }
+        Insert: {
+          joined_at?: string
+          room_id: string
+          status?: Database["public"]["Enums"]["participant_status"]
+          user_id: string
+        }
+        Update: {
+          joined_at?: string
+          room_id?: string
+          status?: Database["public"]["Enums"]["participant_status"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "room_participants_room_id_fkey"
+            columns: ["room_id"]
+            isOneToOne: false
+            referencedRelation: "rooms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rooms: {
+        Row: {
+          created_at: string
+          host_id: string
+          id: string
+          is_playing: boolean
+          name: string
+          playback_time: number
+          updated_at: string
+          video_storage_path: string | null
+          video_url: string | null
+        }
+        Insert: {
+          created_at?: string
+          host_id: string
+          id?: string
+          is_playing?: boolean
+          name?: string
+          playback_time?: number
+          updated_at?: string
+          video_storage_path?: string | null
+          video_url?: string | null
+        }
+        Update: {
+          created_at?: string
+          host_id?: string
+          id?: string
+          is_playing?: boolean
+          name?: string
+          playback_time?: number
+          updated_at?: string
+          video_storage_path?: string | null
+          video_url?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_room_participant: {
+        Args: { _room_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      participant_status: "kirdi" | "yuklanmoqda" | "tayyor"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +270,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      participant_status: ["kirdi", "yuklanmoqda", "tayyor"],
+    },
   },
 } as const
