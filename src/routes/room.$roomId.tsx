@@ -673,11 +673,24 @@ function RoomPage() {
             )}
           </div>
 
-          {/* Sidebar */}
+          {/* Mobile backdrop */}
+          {mobilePanelOpen && (
+            <button
+              type="button"
+              aria-label={uz.hidePanel}
+              onClick={() => setMobilePanelOpen(false)}
+              className="md:hidden absolute inset-0 bg-black/50 z-10"
+            />
+          )}
+
+          {/* Sidebar — overlay on mobile, inline on md+ */}
           <aside
-            className={`border-l bg-surface flex flex-col transition-all duration-300 ease-out shrink-0 ${
-              theaterMode ? "w-0 opacity-0 overflow-hidden" : "w-80 opacity-100"
-            }`}
+            className={`bg-surface flex flex-col shrink-0
+              absolute md:static inset-y-0 right-0 z-20 w-[85%] max-w-sm md:w-80
+              border-l transition-transform duration-300 ease-out
+              ${mobilePanelOpen ? "translate-x-0" : "translate-x-full"}
+              md:translate-x-0
+              ${theaterMode ? "md:w-0 md:opacity-0 md:overflow-hidden" : "md:opacity-100"}`}
           >
             <Tabs defaultValue="cameras" className="flex flex-col h-full min-h-0">
               <TabsList className="grid grid-cols-2 m-2">
