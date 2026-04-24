@@ -478,24 +478,34 @@ function RoomPage() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button size="sm" variant="outline" onClick={copyLink}>
-                  <Copy className="size-3.5 mr-1.5" />
-                  {uz.copyLink}
+                  <Copy className="size-3.5 sm:mr-1.5" />
+                  <span className="hidden sm:inline">{uz.copyLink}</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{uz.copyLink}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button size="sm" variant="outline" onClick={() => setTheaterMode((v) => !v)}>
+                <Button size="sm" variant="outline" onClick={() => setTheaterMode((v) => !v)} className="hidden md:inline-flex">
                   {theaterMode ? <Minimize2 className="size-3.5 mr-1.5" /> : <Maximize2 className="size-3.5 mr-1.5" />}
                   {theaterMode ? uz.exitTheater : uz.theaterMode}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{theaterMode ? uz.exitTheater : uz.theaterMode}</TooltipContent>
             </Tooltip>
+            {/* Mobile-only panel toggle */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setMobilePanelOpen((v) => !v)}
+              className="md:hidden"
+              aria-label={mobilePanelOpen ? uz.hidePanel : uz.showPanel}
+            >
+              {mobilePanelOpen ? <PanelRightClose className="size-3.5" /> : <PanelRightOpen className="size-3.5" />}
+            </Button>
             <Button size="sm" variant="ghost" onClick={leave}>
-              <LogOut className="size-3.5 mr-1.5" />
-              {uz.leave}
+              <LogOut className="size-3.5 sm:mr-1.5" />
+              <span className="hidden sm:inline">{uz.leave}</span>
             </Button>
           </div>
         </header>
