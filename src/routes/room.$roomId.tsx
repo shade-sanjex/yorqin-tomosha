@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Play, Pause, Upload, Link2, Trash2, Maximize2, Minimize2, LogOut,
-  Copy, Loader2, Film, Users, Maximize,
+  Copy, Loader2, Film, Users, Maximize, PanelRightOpen, PanelRightClose,
 } from "lucide-react";
 import { toast } from "sonner";
 import { uz } from "@/lib/uz";
@@ -54,6 +54,7 @@ function RoomPage() {
   const [participants, setParticipants] = useState<{ user_id: string; status: ParticipantStatus }[]>([]);
   const [statusMap, setStatusMap] = useState<Record<string, ParticipantStatus>>({});
   const [theaterMode, setTheaterMode] = useState(false);
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [urlDialogOpen, setUrlDialogOpen] = useState(false);
   const [urlInput, setUrlInput] = useState("");
