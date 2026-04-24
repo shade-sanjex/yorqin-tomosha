@@ -256,6 +256,8 @@ function RoomPage() {
     userId: user?.id ?? "",
     enabled: !!user && !!room,
   });
+  const peerMeshRef = useRef(peerMesh);
+  useEffect(() => { peerMeshRef.current = peerMesh; }, [peerMesh]);
 
   const participantIds = useMemo(() => {
     const ids = new Set<string>();
