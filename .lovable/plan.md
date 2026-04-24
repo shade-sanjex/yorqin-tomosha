@@ -1,59 +1,59 @@
 
-# Watch Party — Sinxron kino tomosha ilovasi
+# Watch Party — 5 ta tuzatish va yaxshilash
 
-Do'stlar bilan birga video ko'rish uchun real-time sinxron pleer, kamera/ovoz aloqasi, chat va reaktsiyalar. Butun interfeys o'zbek tilida (lotin yozuvi).
+## Bajariladigan vazifalar
 
-## Texnologiyalar
-- **Frontend**: React + TanStack Router + Tailwind, deep dark tema (`#0A0A0F` fon, `#8B5CF6` aksent)
-- **Backend**: Lovable Cloud (Supabase) — Auth, Realtime, Storage, RLS
-- **Auth**: Email + parol va Google
-- **WebRTC signaling**: Supabase Broadcast kanallari (mesh P2P, 2–6 kishi)
+### 1. Mahalliy kamerani oynaviy aks ettirish
+`CameraGrid.tsx` ichidagi `VideoTile` da `isSelf={true}` bo'lsa `<video>` elementiga `-scale-x-100` qo'shiladi. Boshqa peer'larning videosi aks ettirilmaydi.
 
-## Ma'lumotlar bazasi sxemasi
-- `profiles` — `id`, `display_name`, `avatar_url` (auth.users bilan trigger orqali bog'lanadi)
-- `rooms` — `id`, `host_id`, `video_url`, `video_storage_path`, `current_time`, `is_playing`, `created_at`
-- `room_participants` — `room_id`, `user_id`, `status` ('kirdi' | 'yuklanmoqda' | 'tayyor'), `joined_at`
-- `chat_messages` — `id`, `room_id`, `user_id`, `content`, `created_at`
-- **Storage bucket**: `watch_party_media` (autentifikatsiyalangan foydalanuvchilar uchun)
-- **RLS**: faqat `host_id` xona holatini o'zgartira oladi; ishtirokchilar faqat o'zlari kirgan xonalarni ko'radi va o'z statusini yangilaydi
+### 2. WebRTC audio/video va mahalliy mute
+- `usePeerMesh.ts`: `getUserMedia` allaqachon `audio:true, video:true` chaqiradi — saqlanadi. Tekshiramiz: `pc.addTrack` har ikki track uchun ham qo'llaniladi (allaqachon to'g'ri).
+- `CameraGrid.tsx` `VideoTile`: `<video>` da `muted={isSelf}` (o'z ovozini eshitmaslik), remote uchun `muted={false}` va `autoPlay`.
+- **Mahalliy "Ovozni o'chirish" tugmasi**: Har bir remote tile'ga `Volume2/VolumeX` icon-tugma qo'shiladi. Bosilganda `videoElement.volume = 0` (yoki `muted=true`) qilinadi. Faqat shu foydalanuvchining brauzerida ta'sir qiladi, broadcast'ga ta'siri yo'q. Holat tile ichidagi `useState` da saqlanadi.
 
-## Sahifalar (TanStack route fayllari)
-1. `/` — Landing: brend, "Xona yaratish" va "Kirish" tugmalari
-2. `/auth` — Email/parol + Google sign-in (o'zbekcha)
-3. `/_authenticated/dashboard` — Mening xonalarim, "Yangi xona yaratish"
-4. `/_authenticated/room/$roomId` — Asosiy Watch Party interfeysi
+### 3. Google OAuth tuzatish
+`auth.tsx` da `signInWithOAuth` chaqiruvi `redirectTo: ${window.location.origin}/dashboard` bilan saqlanadi. Tuzatishlar:
+- `redirected` holatini xato deb hisoblamaslik (loading'ni redirect bo'lganda saqlash).
+- `data.url` mavjud bo'lsa qo'lda `window.location.assign(data.url)` (ba'zi browser'lar avtomatik redirect qilmaydi).
+- Xatolikda `toast.error("Kirishda xatolik yuz berdi")` ko'rsatiladi.
+- `uz.ts` ga `googleSignInError: "Kirishda xatolik yuz berdi"` qo'shiladi.
 
-## Watch Party xona interfeysi
-**Yuqori panel**: Xona nomi, ishtirokchilar soni, "Havolani nusxalash", "Kino rejimi" toggle, "Chiqish"
+### 4. Aniq rolga asoslangan pleer boshqaruvi
+`room.$roomId.tsx`:
+- Hozirgi `<video controls={isHost}>` mehmonlarda native control'larni yashiradi — bu yaxshi, lekin Fullscreen ham yo'qoladi.
+- **Yechim**: Mehmon uchun `controls={false}` qoldiriladi va o'z ustki overlay'imiz qo'shiladi: faqat "To'liq ekran" tugmasi (`Maximize` icon) videoning yuqori-o'ng burchagida. Bosilganda `videoRef.current.requestFullscreen()` chaqiriladi.
+- Mehmonlarda `video` elementga `onClick`/`onSeeked` ta'sir qilmaydi, chunki controls yo'q. Qo'shimcha xavfsizlik: `seeked`/`play`/`pause` event handler'lari ichida `if (!isHost) return` allaqachon mavjud — saqlanadi.
+- "Faqat xona yaratuvchisi boshqaradi" rozetkasi qoldiriladi.
 
-**Markaz — Video pleer**:
-- Custom `<video>` element, host'gagina control'lar ko'rinadi (mehmonlarga vizual o'chirilgan, tooltip: "Faqat xona yaratuvchisi boshqaradi")
-- "Video yuklash" (mp4/webm, progress bar %li) yoki "Tashqi URL qo'shish" modal
-- **Sync engine**: host `current_time`/`is_playing` ni Realtime broadcast qiladi; mehmonlar majburan sinxronlanadi (>0.5s drift bo'lsa seek)
-- **Buffering Failsafe**: har qanday ishtirokchi `onWaiting` da o'z statusini `yuklanmoqda` ga o'zgartiradi → barchaning videosi avto-pauza + overlay: *"Kuting, [Ism] tarmog'i qotib qoldi..."*. Hammada `tayyor` bo'lsa davom etadi
-- Reaktsiya tugmalari (😂 🔥 😲 ❤️ 👏) — bosilganda emoji video ustida 3 sekund yuqoriga "suzib" ketadi (CSS keyframes)
+### 5. Host moderatsiya: Global Mute & Kick
+**UI**: Har bir remote `VideoTile` uchun (faqat joriy foydalanuvchi host bo'lsa) 3-nuqta `DropdownMenu` qo'shiladi. Ichida:
+- "Hammaga ovozini o'chirish" (`Hammaga ovozini o'chirish`)
+- "Xonadan chetlatish" (`Xonadan chetlatish`)
 
-**O'ng sidebar** (kino rejimida slayd bilan yashiriladi):
-- **Kameralar grid**: har bir ishtirokchi uchun video kvadrat, mikrofon/kamera toggle, gaplashayotganda yashil porlash (Web Audio API analyser)
-- **Chat tab**: real-time xabarlar, Enter bilan yuborish
-- WebRTC permission xatoligi: "Kamera va mikrofonga ruxsat bering" tushunarli xabar + qayta urinish tugmasi
+**Signaling**: Yangi Supabase Broadcast kanal `room:{roomId}:moderation` (mavjud `webrtc` kanaliga qo'shimcha emas, alohida — toza ajratish uchun).
 
-**Host uchun "Nuke" tugmasi** (qizil, pastki o'ng burchakda):
-- "Serverdan tozalash" → confirm modal: *"Diqqat! Bu video serverdan butunlay o'chiriladi. Rozimisiz?"*
-- Tasdiqlangach: `storage.remove()` + `video_url`/`video_storage_path` = null
+**Global Mute oqimi**:
+1. Host `moderation` kanaliga `{event:"force-mute", payload:{targetUserId}}` yuboradi.
+2. Mijoz qabul qiladi: agar `targetUserId === userId` bo'lsa, `usePeerMesh` ichidagi yangi `forceMuteMic()` chaqiriladi — `localStream.getAudioTracks().forEach(t => t.enabled = false)` va `setMicEnabled(false)`. Toast: "Yaratuvchi mikrofoningizni o'chirdi".
 
-## WebRTC arxitekturasi
-- Mesh P2P: har bir juftlik orasida `RTCPeerConnection`
-- Signaling: `room:{id}:webrtc` Supabase Broadcast kanali — `offer`, `answer`, `ice-candidate` xabarlari user_id bilan yo'naltiriladi
-- Yangi qo'shilgan kishi mavjudlarga offer yuboradi
-- Active speaker: `AudioContext` + `AnalyserNode`, RMS > threshold bo'lsa border yashil
+**Kick oqimi**:
+1. Host `room_participants` jadvalidan o'sha `user_id` ni `delete` qiladi (RLS allaqachon hostga ruxsat beradi).
+2. Host `moderation` kanaliga `{event:"kick", payload:{targetUserId}}` yuboradi.
+3. Mijoz qabul qiladi: agar o'ziga tegishli bo'lsa — `toast.error("Siz xonadan chetlatildilar")` va `navigate({to:"/dashboard"})`.
 
-## Edge case'lar (to'liq qoplanadi)
-- Host xonadan chiqsa: xona "to'xtatilgan" holatga o'tadi, mehmonlarga xabar
-- Internet uzilsa: avtomatik qayta ulanish + "Qayta ulanmoqda..." indikator
-- Storage bo'sh bo'lsa pleer "Video yuklang" placeholder ko'rsatadi
-- Kamera ruxsati rad etilsa — qayta urinish va "faqat tomosha" rejimi mavjud
-- Tashqi URL noto'g'ri formatda bo'lsa — validation xatoligi o'zbekcha
+**Qo'shilishni oldini olish**: Mavjud `useEffect` da xonaga kirgan zahoti `room_participants` ga `upsert` qiladi. Buni oldini olish uchun yangi `kicked_users` table emas — soddaroq: `localStorage.setItem(\`kicked:${roomId}\`, "1")` chetlatish paytida; `loadRoom` boshida tekshiriladi va darhol redirect qilinadi (mahalliy himoya, server-side emas, lekin vazifaning skopi uchun yetarli).
 
-## Yetkazib beriladigan natija
-To'liq ishlaydigan tipli (TypeScript strict) tizim: SQL migratsiya, RLS siyosatlari, storage bucket, Auth, sinxron pleer hook'i (`useSyncedPlayer`), WebRTC hook'i (`usePeerMesh`), reaktsiya animatsiyalari, chat, Nuke flow, kino rejimi — barchasi o'zbek tilida, placeholder yo'q.
+## Fayllarga o'zgartirishlar
+- `src/components/CameraGrid.tsx` — mirror, mute tugmasi, host dropdown menyusi, callback prop'lar (`onForceMute`, `onKick`).
+- `src/hooks/usePeerMesh.ts` — `forceMuteMic()` eksport qiladi.
+- `src/routes/room.$roomId.tsx` — moderation kanali, kick qabuli, fullscreen overlay tugmasi, kick'dan keyingi qaytishni oldini olish.
+- `src/routes/auth.tsx` — Google OAuth oqimini tuzatish, `redirected` ni e'tiborga olish.
+- `src/lib/uz.ts` — yangi matnlar: `forceMute`, `kick`, `kickedMessage`, `mutedByHost`, `localMute`, `localUnmute`, `fullscreen`, `googleSignInError`.
+
+## Test stsenariyalari
+- Host video o'ynaydi → mehmonda controls yo'q, lekin Fullscreen tugmasi ishlaydi.
+- Mehmon o'z videosini ko'zgu kabi ko'radi; boshqalarni normal ko'radi.
+- Mehmon remote tile'da "🔇" bossa — faqat o'z ovozida o'chadi, boshqalarda emas.
+- Host "Hammaga ovozini o'chirish" bossa — nishon mikrofoni o'chadi (boshqa qatnashchilar ham buni ko'radi, chunki audio track'da signal yo'qoladi).
+- Host "Chetlatish" bossa — mehmon /dashboard'ga toast bilan otiladi va qaytib kira olmaydi.
+- Google tugmasi bosilganda Google OAuth sahifasiga o'tadi; muvaffaqiyatda `/dashboard` ga qaytadi.
