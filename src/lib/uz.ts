@@ -71,4 +71,15 @@ export const uz = {
   goHome: "Bosh sahifa",
   loading: "Yuklanmoqda...",
   hostLeft: "Xona yaratuvchisi chiqib ketdi",
+  // Moderation
+  localMute: "Ovozni o'chirish",
+  localUnmute: "Ovozni yoqish",
+  forceMute: "Hammaga ovozini o'chirish",
+  kick: "Xonadan chetlatish",
+  kickedMessage: "Siz xonadan chetlatildingiz",
+  mutedByHost: "Yaratuvchi mikrofoningizni o'chirdi",
+  fullscreen: "To'liq ekran",
+  hostActions: "Yaratuvchi amallari",
+  // OAuth
+  googleSignInError: "Kirishda xatolik yuz berdi",
 } as const;

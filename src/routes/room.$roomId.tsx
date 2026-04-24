@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Play, Pause, Upload, Link2, Trash2, Maximize2, Minimize2, LogOut,
-  Copy, Loader2, Film, Users,
+  Copy, Loader2, Film, Users, Maximize,
 } from "lucide-react";
 import { toast } from "sonner";
 import { uz } from "@/lib/uz";
@@ -61,6 +61,7 @@ function RoomPage() {
   const [floatingEmojis, setFloatingEmojis] = useState<FloatingEmoji[]>([]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const reactionChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const moderationChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const isHost = !!(user && room && user.id === room.host_id);
 
@@ -73,6 +74,13 @@ function RoomPage() {
   useEffect(() => {
     if (!user) return;
     let mounted = true;
+
+    // Block re-entry if previously kicked from this room
+    if (typeof window !== "undefined" && window.localStorage.getItem(`kicked:${roomId}`) === "1") {
+      toast.error(uz.kickedMessage);
+      navigate({ to: "/dashboard" });
+      return;
+    }
 
     (async () => {
       const { data, error } = await supabase
@@ -163,6 +171,33 @@ function RoomPage() {
     return () => { supabase.removeChannel(ch); reactionChannelRef.current = null; };
   }, [roomId]);
 
+  // Moderation channel (force-mute, kick)
+  useEffect(() => {
+    if (!user) return;
+    const ch = supabase.channel(`room:${roomId}:moderation`, { config: { broadcast: { self: false } } });
+    moderationChannelRef.current = ch;
+
+    ch.on("broadcast", { event: "force-mute" }, ({ payload }) => {
+      const { targetUserId } = payload as { targetUserId: string };
+      if (targetUserId === user.id) {
+        peerMeshRef.current?.forceMuteMic();
+        toast.warning(uz.mutedByHost);
+      }
+    });
+
+    ch.on("broadcast", { event: "kick" }, ({ payload }) => {
+      const { targetUserId } = payload as { targetUserId: string };
+      if (targetUserId === user.id) {
+        try { window.localStorage.setItem(`kicked:${roomId}`, "1"); } catch { /* noop */ }
+        toast.error(uz.kickedMessage);
+        navigate({ to: "/dashboard" });
+      }
+    });
+
+    ch.subscribe();
+    return () => { supabase.removeChannel(ch); moderationChannelRef.current = null; };
+  }, [roomId, user, navigate]);
+
   const addFloating = useCallback((emoji: string) => {
     const id = Date.now() + Math.random();
     const left = 20 + Math.random() * 60;
@@ -221,6 +256,8 @@ function RoomPage() {
     userId: user?.id ?? "",
     enabled: !!user && !!room,
   });
+  const peerMeshRef = useRef(peerMesh);
+  useEffect(() => { peerMeshRef.current = peerMesh; }, [peerMesh]);
 
   const participantIds = useMemo(() => {
     const ids = new Set<string>();
@@ -370,6 +407,40 @@ function RoomPage() {
 
   const leave = () => navigate({ to: "/dashboard" });
 
+  const requestFullscreen = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      v.requestFullscreen().catch(() => {});
+    }
+  };
+
+  const handleForceMute = (targetUserId: string) => {
+    moderationChannelRef.current?.send({
+      type: "broadcast",
+      event: "force-mute",
+      payload: { targetUserId },
+    });
+    toast.success(uz.forceMute);
+  };
+
+  const handleKick = async (targetUserId: string) => {
+    if (!room) return;
+    await supabase
+      .from("room_participants")
+      .delete()
+      .eq("room_id", roomId)
+      .eq("user_id", targetUserId);
+    moderationChannelRef.current?.send({
+      type: "broadcast",
+      event: "kick",
+      payload: { targetUserId },
+    });
+    toast.success(uz.kick);
+  };
+
   if (authLoading || loading || !user || !room) {
     return (
       <div className="min-h-screen grid place-items-center">
@@ -452,11 +523,25 @@ function RoomPage() {
                 </div>
               )}
 
-              {/* Guest "no controls" hint */}
+              {/* Guest "no controls" hint + fullscreen button */}
               {room.video_url && !isHost && (
-                <div className="absolute top-2 left-2 px-2 py-1 rounded bg-black/60 text-white text-[11px]">
-                  {uz.hostOnly}
-                </div>
+                <>
+                  <div className="absolute top-2 left-2 px-2 py-1 rounded bg-black/60 text-white text-[11px]">
+                    {uz.hostOnly}
+                  </div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={requestFullscreen}
+                        className="absolute top-2 right-2 size-9 rounded-md bg-black/60 hover:bg-black/80 grid place-items-center text-white"
+                        aria-label={uz.fullscreen}
+                      >
+                        <Maximize className="size-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>{uz.fullscreen}</TooltipContent>
+                  </Tooltip>
+                </>
               )}
 
               {/* Buffering overlay */}
@@ -601,6 +686,10 @@ function RoomPage() {
                   onRetry={peerMesh.retryPermission}
                   selfId={user.id}
                   selfName={selfName}
+                  isHost={isHost}
+                  hostId={room.host_id}
+                  onForceMute={handleForceMute}
+                  onKick={handleKick}
                 />
                 <div className="mt-4 border-t pt-3">
                   <h4 className="text-xs uppercase text-muted-foreground font-medium mb-2">{uz.participants}</h4>

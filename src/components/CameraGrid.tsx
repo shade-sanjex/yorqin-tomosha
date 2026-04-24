@@ -3,7 +3,13 @@ import type { PeerState } from "@/hooks/usePeerMesh";
 import type { ProfileLite } from "@/hooks/useProfiles";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
-import { Mic, MicOff, Video, VideoOff, AlertCircle } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Mic, MicOff, Video, VideoOff, AlertCircle, Volume2, VolumeX, MoreVertical, MicOff as ForceMuteIcon, UserX } from "lucide-react";
 import { uz } from "@/lib/uz";
 
 interface CameraGridProps {
@@ -19,17 +25,42 @@ interface CameraGridProps {
   onRetry: () => void;
   selfId: string;
   selfName: string;
+  isHost: boolean;
+  hostId: string;
+  onForceMute: (userId: string) => void;
+  onKick: (userId: string) => void;
+}
+
+interface VideoTileProps {
+  stream: MediaStream | null;
+  name: string;
+  speaking: boolean;
+  isSelf?: boolean;
+  isHost?: boolean;
+  showHostMenu?: boolean;
+  onForceMute?: () => void;
+  onKick?: () => void;
 }
 
 function VideoTile({
-  stream, name, speaking, muted, isSelf,
-}: { stream: MediaStream | null; name: string; speaking: boolean; muted?: boolean; isSelf?: boolean }) {
+  stream, name, speaking, isSelf, isHost, showHostMenu, onForceMute, onKick,
+}: VideoTileProps) {
   const ref = useRef<HTMLVideoElement>(null);
+  const [locallyMuted, setLocallyMuted] = useState(false);
+
   useEffect(() => {
     if (ref.current && stream) {
       ref.current.srcObject = stream;
     }
   }, [stream]);
+
+  // Apply local mute (volume) to remote video element
+  useEffect(() => {
+    if (ref.current && !isSelf) {
+      ref.current.muted = locallyMuted;
+      ref.current.volume = locallyMuted ? 0 : 1;
+    }
+  }, [locallyMuted, isSelf]);
 
   const hasVideo = !!stream && stream.getVideoTracks().some((t) => t.enabled);
 
@@ -40,8 +71,8 @@ function VideoTile({
           ref={ref}
           autoPlay
           playsInline
-          muted={muted || isSelf}
-          className={`w-full h-full object-cover ${hasVideo ? "" : "opacity-0"}`}
+          muted={isSelf || locallyMuted}
+          className={`w-full h-full object-cover ${hasVideo ? "" : "opacity-0"} ${isSelf ? "-scale-x-100" : ""}`}
         />
       ) : null}
       {!hasVideo && (
@@ -51,8 +82,50 @@ function VideoTile({
           </div>
         </div>
       )}
+
+      {/* Top-right action buttons for remote tiles */}
+      {!isSelf && (
+        <div className="absolute top-1 right-1 flex items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setLocallyMuted((v) => !v)}
+                className="size-7 rounded-md bg-black/60 hover:bg-black/80 grid place-items-center text-white"
+                aria-label={locallyMuted ? uz.localUnmute : uz.localMute}
+              >
+                {locallyMuted ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{locallyMuted ? uz.localUnmute : uz.localMute}</TooltipContent>
+          </Tooltip>
+
+          {showHostMenu && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="size-7 rounded-md bg-black/60 hover:bg-black/80 grid place-items-center text-white"
+                  aria-label={uz.hostActions}
+                >
+                  <MoreVertical className="size-3.5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={onForceMute}>
+                  <ForceMuteIcon className="size-4 mr-2" />
+                  {uz.forceMute}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onKick} className="text-destructive focus:text-destructive">
+                  <UserX className="size-4 mr-2" />
+                  {uz.kick}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+      )}
+
       <div className="absolute bottom-1.5 left-1.5 right-1.5 text-[11px] font-medium text-white drop-shadow flex items-center gap-1">
-        <span className="truncate">{name}{isSelf ? " (siz)" : ""}</span>
+        <span className="truncate">{name}{isSelf ? " (siz)" : ""}{isHost ? " 👑" : ""}</span>
       </div>
     </div>
   );
@@ -61,6 +134,7 @@ function VideoTile({
 export function CameraGrid({
   localStream, localSpeaking, peers, profiles, permError,
   micEnabled, camEnabled, onToggleMic, onToggleCam, onRetry, selfId, selfName,
+  isHost, hostId, onForceMute, onKick,
 }: CameraGridProps) {
   const [permDismissed, setPermDismissed] = useState(false);
 
@@ -85,13 +159,23 @@ export function CameraGrid({
     <TooltipProvider>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-2">
-          <VideoTile stream={localStream} name={selfName} speaking={localSpeaking} isSelf />
+          <VideoTile
+            stream={localStream}
+            name={selfName}
+            speaking={localSpeaking}
+            isSelf
+            isHost={selfId === hostId}
+          />
           {peerEntries.map((p) => (
             <VideoTile
               key={p.userId}
               stream={p.stream}
               name={profiles[p.userId]?.display_name ?? "Mehmon"}
               speaking={p.speaking}
+              isHost={p.userId === hostId}
+              showHostMenu={isHost && p.userId !== selfId}
+              onForceMute={() => onForceMute(p.userId)}
+              onKick={() => onKick(p.userId)}
             />
           ))}
         </div>

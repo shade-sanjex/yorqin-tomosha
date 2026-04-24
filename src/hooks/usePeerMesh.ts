@@ -250,6 +250,13 @@ export function usePeerMesh({ roomId, userId, enabled }: UsePeerMeshArgs) {
     await acquireMedia();
   }, [acquireMedia]);
 
+  const forceMuteMic = useCallback(() => {
+    const s = localStreamRef.current;
+    if (!s) return;
+    s.getAudioTracks().forEach((t) => (t.enabled = false));
+    setMicEnabled(false);
+  }, []);
+
   return {
     localStream,
     localSpeaking,
@@ -260,5 +267,7 @@ export function usePeerMesh({ roomId, userId, enabled }: UsePeerMeshArgs) {
     toggleMic,
     toggleCam,
     retryPermission,
+    forceMuteMic,
   };
 }
+
