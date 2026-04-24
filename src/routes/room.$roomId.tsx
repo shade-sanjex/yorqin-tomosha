@@ -686,6 +686,10 @@ function RoomPage() {
                   onRetry={peerMesh.retryPermission}
                   selfId={user.id}
                   selfName={selfName}
+                  isHost={isHost}
+                  hostId={room.host_id}
+                  onForceMute={handleForceMute}
+                  onKick={handleKick}
                 />
                 <div className="mt-4 border-t pt-3">
                   <h4 className="text-xs uppercase text-muted-foreground font-medium mb-2">{uz.participants}</h4>
