@@ -74,6 +74,13 @@ function RoomPage() {
     if (!user) return;
     let mounted = true;
 
+    // Block re-entry if previously kicked from this room
+    if (typeof window !== "undefined" && window.localStorage.getItem(`kicked:${roomId}`) === "1") {
+      toast.error(uz.kickedMessage);
+      navigate({ to: "/dashboard" });
+      return;
+    }
+
     (async () => {
       const { data, error } = await supabase
         .from("rooms")
