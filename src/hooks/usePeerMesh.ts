@@ -116,7 +116,11 @@ export function usePeerMesh({ roomId, userId, enabled }: UsePeerMeshArgs) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true },
-        video: { width: 320, height: 240 },
+        video: {
+          facingMode: "user",
+          width: { ideal: 320 },
+          height: { ideal: 240 },
+        },
       });
       localStreamRef.current = stream;
       setLocalStream(stream);
