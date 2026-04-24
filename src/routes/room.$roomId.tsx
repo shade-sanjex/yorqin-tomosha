@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Play, Pause, Upload, Link2, Trash2, Maximize2, Minimize2, LogOut,
-  Copy, Loader2, Film, Users, Maximize,
+  Copy, Loader2, Film, Users, Maximize, PanelRightOpen, PanelRightClose,
 } from "lucide-react";
 import { toast } from "sonner";
 import { uz } from "@/lib/uz";
@@ -54,6 +54,7 @@ function RoomPage() {
   const [participants, setParticipants] = useState<{ user_id: string; status: ParticipantStatus }[]>([]);
   const [statusMap, setStatusMap] = useState<Record<string, ParticipantStatus>>({});
   const [theaterMode, setTheaterMode] = useState(false);
+  const [mobilePanelOpen, setMobilePanelOpen] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [urlDialogOpen, setUrlDialogOpen] = useState(false);
   const [urlInput, setUrlInput] = useState("");
@@ -477,32 +478,43 @@ function RoomPage() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button size="sm" variant="outline" onClick={copyLink}>
-                  <Copy className="size-3.5 mr-1.5" />
-                  {uz.copyLink}
+                  <Copy className="size-3.5 sm:mr-1.5" />
+                  <span className="hidden sm:inline">{uz.copyLink}</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{uz.copyLink}</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button size="sm" variant="outline" onClick={() => setTheaterMode((v) => !v)}>
+                <Button size="sm" variant="outline" onClick={() => setTheaterMode((v) => !v)} className="hidden md:inline-flex">
                   {theaterMode ? <Minimize2 className="size-3.5 mr-1.5" /> : <Maximize2 className="size-3.5 mr-1.5" />}
                   {theaterMode ? uz.exitTheater : uz.theaterMode}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>{theaterMode ? uz.exitTheater : uz.theaterMode}</TooltipContent>
             </Tooltip>
+            {/* Mobile-only panel toggle */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setMobilePanelOpen((v) => !v)}
+              className="md:hidden"
+              aria-label={mobilePanelOpen ? uz.hidePanel : uz.showPanel}
+            >
+              {mobilePanelOpen ? <PanelRightClose className="size-3.5" /> : <PanelRightOpen className="size-3.5" />}
+            </Button>
             <Button size="sm" variant="ghost" onClick={leave}>
-              <LogOut className="size-3.5 mr-1.5" />
-              {uz.leave}
+              <LogOut className="size-3.5 sm:mr-1.5" />
+              <span className="hidden sm:inline">{uz.leave}</span>
             </Button>
           </div>
         </header>
 
-        {/* Body */}
-        <div className="flex-1 flex min-h-0">
+        {/* Body — mobile: video on top full-width; sidebar slides in as overlay. Desktop: side-by-side. */}
+        <div className="flex-1 flex flex-col md:flex-row min-h-0 relative">
           {/* Video area */}
-          <div className="flex-1 flex flex-col min-w-0 p-3 gap-3">
+          <div className="flex-1 flex flex-col min-w-0 p-2 md:p-3 gap-2 md:gap-3">
+
             <div className="relative flex-1 rounded-xl overflow-hidden bg-black border min-h-0">
               {room.video_url ? (
                 <video
@@ -661,11 +673,24 @@ function RoomPage() {
             )}
           </div>
 
-          {/* Sidebar */}
+          {/* Mobile backdrop */}
+          {mobilePanelOpen && (
+            <button
+              type="button"
+              aria-label={uz.hidePanel}
+              onClick={() => setMobilePanelOpen(false)}
+              className="md:hidden absolute inset-0 bg-black/50 z-10"
+            />
+          )}
+
+          {/* Sidebar — overlay on mobile, inline on md+ */}
           <aside
-            className={`border-l bg-surface flex flex-col transition-all duration-300 ease-out shrink-0 ${
-              theaterMode ? "w-0 opacity-0 overflow-hidden" : "w-80 opacity-100"
-            }`}
+            className={`bg-surface flex flex-col shrink-0
+              absolute md:static inset-y-0 right-0 z-20 w-[85%] max-w-sm md:w-80
+              border-l transition-transform duration-300 ease-out
+              ${mobilePanelOpen ? "translate-x-0" : "translate-x-full"}
+              md:translate-x-0
+              ${theaterMode ? "md:w-0 md:opacity-0 md:overflow-hidden" : "md:opacity-100"}`}
           >
             <Tabs defaultValue="cameras" className="flex flex-col h-full min-h-0">
               <TabsList className="grid grid-cols-2 m-2">

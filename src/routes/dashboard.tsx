@@ -1,16 +1,18 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { uz } from "@/lib/uz";
 import { toast } from "sonner";
-import { Film, Plus, LogOut, Trash2, ExternalLink, Loader2 } from "lucide-react";
+import { Film, Plus, LogOut, Trash2, ExternalLink, Loader2, ShieldAlert } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ServerMediaManager } from "@/components/ServerMediaManager";
 
 export const Route = createFileRoute("/dashboard")({
   component: Dashboard,
@@ -25,6 +27,7 @@ interface Room {
 
 function Dashboard() {
   const { user, loading } = useAuth();
+  const isSuperAdmin = useSuperAdmin();
   const navigate = useNavigate();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [creating, setCreating] = useState(false);
@@ -96,9 +99,18 @@ function Dashboard() {
             <Film className="size-5 text-primary" />
             <span className="font-bold">Birga Tomosha</span>
           </Link>
-          <Button variant="ghost" size="sm" onClick={signOut}>
-            <LogOut className="size-4 mr-1.5" /> {uz.signOut}
-          </Button>
+          <div className="flex items-center gap-2">
+            {isSuperAdmin && (
+              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md bg-primary/15 text-primary">
+                <ShieldAlert className="size-3" />
+                {uz.superAdmin}
+              </span>
+            )}
+            {isSuperAdmin && <ServerMediaManager />}
+            <Button variant="ghost" size="sm" onClick={signOut}>
+              <LogOut className="size-4 mr-1.5" /> {uz.signOut}
+            </Button>
+          </div>
         </div>
       </header>
 

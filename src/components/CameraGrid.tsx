@@ -67,13 +67,19 @@ function VideoTile({
   return (
     <div className={`relative aspect-video rounded-lg overflow-hidden bg-surface-2 border transition-shadow ${speaking ? "speaking-glow" : ""}`}>
       {stream ? (
-        <video
-          ref={ref}
-          autoPlay
-          playsInline
-          muted={isSelf || locallyMuted}
-          className={`w-full h-full object-cover ${hasVideo ? "" : "opacity-0"} ${isSelf ? "-scale-x-100" : ""}`}
-        />
+        // Wrapper applies the mirror transform safely without affecting child layout
+        <div
+          className="absolute inset-0"
+          style={isSelf ? { transform: "rotateY(180deg)" } : undefined}
+        >
+          <video
+            ref={ref}
+            autoPlay
+            playsInline
+            muted={isSelf || locallyMuted}
+            className={`w-full h-full object-cover ${hasVideo ? "" : "opacity-0"}`}
+          />
+        </div>
       ) : null}
       {!hasVideo && (
         <div className="absolute inset-0 grid place-items-center">
