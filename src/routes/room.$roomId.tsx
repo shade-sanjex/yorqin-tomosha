@@ -61,6 +61,7 @@ function RoomPage() {
   const [floatingEmojis, setFloatingEmojis] = useState<FloatingEmoji[]>([]);
   const videoRef = useRef<HTMLVideoElement>(null);
   const reactionChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const moderationChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const isHost = !!(user && room && user.id === room.host_id);
 
@@ -376,6 +377,40 @@ function RoomPage() {
   };
 
   const leave = () => navigate({ to: "/dashboard" });
+
+  const requestFullscreen = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      v.requestFullscreen().catch(() => {});
+    }
+  };
+
+  const handleForceMute = (targetUserId: string) => {
+    moderationChannelRef.current?.send({
+      type: "broadcast",
+      event: "force-mute",
+      payload: { targetUserId },
+    });
+    toast.success(uz.forceMute);
+  };
+
+  const handleKick = async (targetUserId: string) => {
+    if (!room) return;
+    await supabase
+      .from("room_participants")
+      .delete()
+      .eq("room_id", roomId)
+      .eq("user_id", targetUserId);
+    moderationChannelRef.current?.send({
+      type: "broadcast",
+      event: "kick",
+      payload: { targetUserId },
+    });
+    toast.success(uz.kick);
+  };
 
   if (authLoading || loading || !user || !room) {
     return (
