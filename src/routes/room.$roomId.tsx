@@ -171,7 +171,32 @@ function RoomPage() {
     return () => { supabase.removeChannel(ch); reactionChannelRef.current = null; };
   }, [roomId]);
 
-  const addFloating = useCallback((emoji: string) => {
+  // Moderation channel (force-mute, kick)
+  useEffect(() => {
+    if (!user) return;
+    const ch = supabase.channel(`room:${roomId}:moderation`, { config: { broadcast: { self: false } } });
+    moderationChannelRef.current = ch;
+
+    ch.on("broadcast", { event: "force-mute" }, ({ payload }) => {
+      const { targetUserId } = payload as { targetUserId: string };
+      if (targetUserId === user.id) {
+        peerMeshRef.current?.forceMuteMic();
+        toast.warning(uz.mutedByHost);
+      }
+    });
+
+    ch.on("broadcast", { event: "kick" }, ({ payload }) => {
+      const { targetUserId } = payload as { targetUserId: string };
+      if (targetUserId === user.id) {
+        try { window.localStorage.setItem(`kicked:${roomId}`, "1"); } catch { /* noop */ }
+        toast.error(uz.kickedMessage);
+        navigate({ to: "/dashboard" });
+      }
+    });
+
+    ch.subscribe();
+    return () => { supabase.removeChannel(ch); moderationChannelRef.current = null; };
+  }, [roomId, user, navigate]);
     const id = Date.now() + Math.random();
     const left = 20 + Math.random() * 60;
     setFloatingEmojis((prev) => [...prev, { id, emoji, left }]);
