@@ -510,10 +510,11 @@ function RoomPage() {
           </div>
         </header>
 
-        {/* Body */}
-        <div className="flex-1 flex min-h-0">
+        {/* Body — mobile: video on top full-width; sidebar slides in as overlay. Desktop: side-by-side. */}
+        <div className="flex-1 flex flex-col md:flex-row min-h-0 relative">
           {/* Video area */}
-          <div className="flex-1 flex flex-col min-w-0 p-3 gap-3">
+          <div className="flex-1 flex flex-col min-w-0 p-2 md:p-3 gap-2 md:gap-3">
+
             <div className="relative flex-1 rounded-xl overflow-hidden bg-black border min-h-0">
               {room.video_url ? (
                 <video
