@@ -523,11 +523,25 @@ function RoomPage() {
                 </div>
               )}
 
-              {/* Guest "no controls" hint */}
+              {/* Guest "no controls" hint + fullscreen button */}
               {room.video_url && !isHost && (
-                <div className="absolute top-2 left-2 px-2 py-1 rounded bg-black/60 text-white text-[11px]">
-                  {uz.hostOnly}
-                </div>
+                <>
+                  <div className="absolute top-2 left-2 px-2 py-1 rounded bg-black/60 text-white text-[11px]">
+                    {uz.hostOnly}
+                  </div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={requestFullscreen}
+                        className="absolute top-2 right-2 size-9 rounded-md bg-black/60 hover:bg-black/80 grid place-items-center text-white"
+                        aria-label={uz.fullscreen}
+                      >
+                        <Maximize className="size-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>{uz.fullscreen}</TooltipContent>
+                  </Tooltip>
+                </>
               )}
 
               {/* Buffering overlay */}
