@@ -65,13 +65,26 @@ function AuthPage() {
 
   const onGoogle = async () => {
     setSubmitting(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/dashboard` },
-    });
-    if (error) {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`,
+          queryParams: { prompt: "select_account" },
+        },
+      });
+      if (error) {
+        setSubmitting(false);
+        toast.error(uz.googleSignInError);
+        return;
+      }
+      // Some browsers/environments don't auto-redirect — force it.
+      if (data?.url) {
+        window.location.assign(data.url);
+      }
+    } catch {
       setSubmitting(false);
-      toast.error(uz.authError);
+      toast.error(uz.googleSignInError);
     }
   };
 
