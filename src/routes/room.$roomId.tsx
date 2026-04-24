@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Play, Pause, Upload, Link2, Trash2, Maximize2, Minimize2, LogOut,
-  Copy, Loader2, Film, Users,
+  Copy, Loader2, Film, Users, Maximize,
 } from "lucide-react";
 import { toast } from "sonner";
 import { uz } from "@/lib/uz";
