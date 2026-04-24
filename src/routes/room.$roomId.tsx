@@ -197,6 +197,8 @@ function RoomPage() {
     ch.subscribe();
     return () => { supabase.removeChannel(ch); moderationChannelRef.current = null; };
   }, [roomId, user, navigate]);
+
+  const addFloating = useCallback((emoji: string) => {
     const id = Date.now() + Math.random();
     const left = 20 + Math.random() * 60;
     setFloatingEmojis((prev) => [...prev, { id, emoji, left }]);
