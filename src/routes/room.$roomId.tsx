@@ -7,8 +7,8 @@ import { usePeerMesh } from "@/hooks/usePeerMesh";
 import { useProfiles } from "@/hooks/useProfiles";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription,
@@ -20,11 +20,13 @@ import {
 import {
   Play, Pause, Upload, Link2, Trash2, Maximize2, Minimize2, LogOut,
   Copy, Loader2, Film, Users, Maximize, PanelRightOpen, PanelRightClose,
+  Volume2, VolumeX,
 } from "lucide-react";
 import { toast } from "sonner";
 import { uz } from "@/lib/uz";
 import { CameraGrid } from "@/components/CameraGrid";
 import { ChatPanel } from "@/components/ChatPanel";
+import { InviteFriendsDialog } from "@/components/InviteFriendsDialog";
 
 export const Route = createFileRoute("/room/$roomId")({
   component: RoomPage,
@@ -44,6 +46,13 @@ interface FloatingEmoji { id: number; emoji: string; left: number; }
 
 const REACTIONS = ["😂", "🔥", "😲", "❤️", "👏"];
 
+function fmtTime(s: number): string {
+  if (!Number.isFinite(s) || s < 0) s = 0;
+  const m = Math.floor(s / 60);
+  const ss = Math.floor(s % 60).toString().padStart(2, "0");
+  return `${m}:${ss}`;
+}
+
 function RoomPage() {
   const { roomId } = Route.useParams();
   const { user, loading: authLoading } = useAuth();
@@ -60,6 +69,9 @@ function RoomPage() {
   const [urlInput, setUrlInput] = useState("");
   const [nukeOpen, setNukeOpen] = useState(false);
   const [floatingEmojis, setFloatingEmojis] = useState<FloatingEmoji[]>([]);
+  const [volume, setVolume] = useState(1);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const reactionChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const moderationChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -76,7 +88,6 @@ function RoomPage() {
     if (!user) return;
     let mounted = true;
 
-    // Block re-entry if previously kicked from this room
     if (typeof window !== "undefined" && window.localStorage.getItem(`kicked:${roomId}`) === "1") {
       toast.error(uz.kickedMessage);
       navigate({ to: "/dashboard" });
@@ -98,8 +109,8 @@ function RoomPage() {
       }
       setRoom(data);
       setLoading(false);
+      console.log("[Room] loaded", data.id, data.name);
 
-      // Join as participant (idempotent upsert)
       await supabase
         .from("room_participants")
         .upsert(
@@ -139,7 +150,7 @@ function RoomPage() {
     };
   }, [roomId, user, navigate]);
 
-  // Load + subscribe to participants
+  // Participants list
   useEffect(() => {
     if (!user) return;
     const load = async () => {
@@ -170,9 +181,10 @@ function RoomPage() {
       addFloating(emoji);
     }).subscribe();
     return () => { supabase.removeChannel(ch); reactionChannelRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
-  // Moderation channel (force-mute, kick)
+  // Moderation channel
   useEffect(() => {
     if (!user) return;
     const ch = supabase.channel(`room:${roomId}:moderation`, { config: { broadcast: { self: false } } });
@@ -220,7 +232,6 @@ function RoomPage() {
       playbackTime: room?.playback_time ?? 0,
       videoUrl: room?.video_url ?? null,
     }),
-    // only initialize once
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [room?.id]
   );
@@ -229,6 +240,18 @@ function RoomPage() {
     setStatusMap(m);
   }, []);
 
+  // We need profiles to resolve names — declared further down. Use a ref so callback can read.
+  const profilesRef = useRef<Record<string, { display_name: string }>>({});
+
+  const handleRemotePlayer = useCallback((next: { isPlaying: boolean; playbackTime: number }, prev: { isPlaying: boolean; playbackTime: number }) => {
+    if (!room) return;
+    const hostName = profilesRef.current[room.host_id]?.display_name ?? uz.host;
+    if (next.isPlaying !== prev.isPlaying) {
+      console.log("[Sync] remote", next.isPlaying ? "play" : "pause");
+      toast(next.isPlaying ? uz.playedVideo(hostName) : uz.pausedVideo(hostName));
+    }
+  }, [room]);
+
   const synced = useSyncedPlayer({
     roomId,
     userId: user?.id ?? "",
@@ -236,9 +259,9 @@ function RoomPage() {
     videoRef,
     initialState: initialPlayerState,
     onBufferingMapChange: handleBufferingMap,
+    onRemotePlayerChange: handleRemotePlayer,
   });
 
-  // When room.video_url changes from realtime (e.g. host changed), update local
   useEffect(() => {
     if (room) {
       synced.setPlayerState((prev) => ({
@@ -251,11 +274,39 @@ function RoomPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room?.video_url]);
 
-  // WebRTC mesh
+  // WebRTC mesh — with toast callbacks
+  const handlePeerJoin = useCallback((uid: string) => {
+    const name = profilesRef.current[uid]?.display_name ?? "Mehmon";
+    toast(uz.joinedRoom(name));
+  }, []);
+
+  const handlePeerLeave = useCallback((uid: string) => {
+    const name = profilesRef.current[uid]?.display_name ?? "Mehmon";
+    toast(uz.leftRoom(name));
+  }, []);
+
+  const handlePeerMediaChange = useCallback(
+    (ev: { userId: string; micEnabled: boolean; camEnabled: boolean; previous?: { micEnabled: boolean; camEnabled: boolean } }) => {
+      const name = profilesRef.current[ev.userId]?.display_name ?? "Mehmon";
+      if (ev.previous) {
+        if (ev.previous.camEnabled !== ev.camEnabled) {
+          toast(ev.camEnabled ? uz.cameraOn(name) : uz.cameraOff(name));
+        }
+        if (ev.previous.micEnabled !== ev.micEnabled) {
+          toast(ev.micEnabled ? uz.micOnToast(name) : uz.micOffToast(name));
+        }
+      }
+    },
+    []
+  );
+
   const peerMesh = usePeerMesh({
     roomId,
     userId: user?.id ?? "",
     enabled: !!user && !!room,
+    onPeerJoin: handlePeerJoin,
+    onPeerLeave: handlePeerLeave,
+    onPeerMediaChange: handlePeerMediaChange,
   });
   const peerMeshRef = useRef(peerMesh);
   useEffect(() => { peerMeshRef.current = peerMesh; }, [peerMesh]);
@@ -269,13 +320,13 @@ function RoomPage() {
   }, [participants, room, user]);
 
   const profiles = useProfiles(participantIds);
+  useEffect(() => { profilesRef.current = profiles; }, [profiles]);
 
-  // Buffering overlay logic
   const bufferingUserId = useMemo(() => {
     return Object.entries(statusMap).find(([, s]) => s === "yuklanmoqda")?.[0] ?? null;
   }, [statusMap]);
 
-  // Handle video native events to broadcast status & host control
+  // Video native events
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -293,12 +344,18 @@ function RoomPage() {
         synced.broadcastState({ playbackTime: v.currentTime });
       }
     };
+    const onTimeUpdate = () => setCurrentTime(v.currentTime);
+    const onDurationChange = () => setDuration(v.duration || 0);
+    const onLoadedMeta = () => setDuration(v.duration || 0);
     v.addEventListener("waiting", onWaiting);
     v.addEventListener("canplay", onCanPlay);
     v.addEventListener("playing", onPlaying);
     v.addEventListener("play", onPlay);
     v.addEventListener("pause", onPause);
     v.addEventListener("seeked", onSeeked);
+    v.addEventListener("timeupdate", onTimeUpdate);
+    v.addEventListener("durationchange", onDurationChange);
+    v.addEventListener("loadedmetadata", onLoadedMeta);
     return () => {
       v.removeEventListener("waiting", onWaiting);
       v.removeEventListener("canplay", onCanPlay);
@@ -306,8 +363,16 @@ function RoomPage() {
       v.removeEventListener("play", onPlay);
       v.removeEventListener("pause", onPause);
       v.removeEventListener("seeked", onSeeked);
+      v.removeEventListener("timeupdate", onTimeUpdate);
+      v.removeEventListener("durationchange", onDurationChange);
+      v.removeEventListener("loadedmetadata", onLoadedMeta);
     };
   }, [isHost, synced]);
+
+  // Keep video volume in sync
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.volume = volume;
+  }, [volume]);
 
   const togglePlay = () => {
     if (!isHost) {
@@ -320,6 +385,14 @@ function RoomPage() {
     else v.pause();
   };
 
+  const seekTo = (sec: number) => {
+    if (!isHost) return;
+    const v = videoRef.current;
+    if (!v) return;
+    v.currentTime = sec;
+    setCurrentTime(sec);
+  };
+
   const handleUpload = async (file: File) => {
     if (!user || !isHost) return;
     if (!file.type.startsWith("video/")) {
@@ -329,7 +402,6 @@ function RoomPage() {
     const ext = file.name.split(".").pop() || "mp4";
     const path = `${user.id}/${roomId}-${Date.now()}.${ext}`;
     setUploadProgress(0);
-    // Use XHR for progress
     const { data: signed, error: signErr } = await supabase
       .storage
       .from("watch_party_media")
@@ -375,7 +447,6 @@ function RoomPage() {
       toast.error(uz.invalidUrl);
       return;
     }
-    // If a previously uploaded video exists, remove it
     if (room?.video_storage_path) {
       await supabase.storage.from("watch_party_media").remove([room.video_storage_path]);
     }
@@ -475,6 +546,7 @@ function RoomPage() {
             </div>
           </div>
           <div className="flex items-center gap-1.5">
+            <InviteFriendsDialog roomId={roomId} roomName={room.name} />
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button size="sm" variant="outline" onClick={copyLink}>
@@ -493,7 +565,6 @@ function RoomPage() {
               </TooltipTrigger>
               <TooltipContent>{theaterMode ? uz.exitTheater : uz.theaterMode}</TooltipContent>
             </Tooltip>
-            {/* Mobile-only panel toggle */}
             <Button
               size="sm"
               variant="outline"
@@ -510,20 +581,21 @@ function RoomPage() {
           </div>
         </header>
 
-        {/* Body — mobile: video on top full-width; sidebar slides in as overlay. Desktop: side-by-side. */}
+        {/* Body */}
         <div className="flex-1 flex flex-col md:flex-row min-h-0 relative">
           {/* Video area */}
           <div className="flex-1 flex flex-col min-w-0 p-2 md:p-3 gap-2 md:gap-3">
-
             <div className="relative flex-1 rounded-xl overflow-hidden bg-black border min-h-0">
               {room.video_url ? (
                 <video
                   ref={videoRef}
                   src={room.video_url}
                   className="w-full h-full object-contain"
-                  controls={isHost}
-                  controlsList="nodownload"
+                  controls={false}
+                  controlsList="nodownload nofullscreen noremoteplayback"
+                  disablePictureInPicture
                   playsInline
+                  onContextMenu={(e) => e.preventDefault()}
                 />
               ) : (
                 <div className="absolute inset-0 grid place-items-center text-center p-6">
@@ -535,28 +607,67 @@ function RoomPage() {
                 </div>
               )}
 
-              {/* Guest "no controls" hint + fullscreen button */}
-              {room.video_url && !isHost && (
-                <>
-                  <div className="absolute top-2 left-2 px-2 py-1 rounded bg-black/60 text-white text-[11px]">
-                    {uz.hostOnly}
+              {/* Custom player overlay */}
+              {room.video_url && (
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-3 pt-8 flex flex-col gap-2">
+                  {/* Seek bar — host can scrub, guest is read-only */}
+                  <div className="flex items-center gap-2 text-[11px] text-white font-mono">
+                    <span>{fmtTime(currentTime)}</span>
+                    <Slider
+                      value={[currentTime]}
+                      max={duration || 1}
+                      step={0.1}
+                      onValueChange={(v) => isHost && seekTo(v[0])}
+                      disabled={!isHost}
+                      className="flex-1"
+                    />
+                    <span>{fmtTime(duration)}</span>
                   </div>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
+
+                  <div className="flex items-center gap-2">
+                    {isHost && (
+                      <Button size="icon" variant="secondary" onClick={togglePlay} className="size-8">
+                        {room.is_playing ? <Pause className="size-4" /> : <Play className="size-4" />}
+                      </Button>
+                    )}
+                    {!isHost && (
+                      <span className="text-[11px] text-white/80 px-2 py-1 rounded bg-black/40">
+                        {uz.hostOnly}
+                      </span>
+                    )}
+
+                    <div className="flex items-center gap-2 ml-auto">
                       <button
-                        onClick={requestFullscreen}
-                        className="absolute top-2 right-2 size-9 rounded-md bg-black/60 hover:bg-black/80 grid place-items-center text-white"
-                        aria-label={uz.fullscreen}
+                        onClick={() => setVolume((v) => (v > 0 ? 0 : 1))}
+                        className="text-white/90 hover:text-white"
+                        aria-label={uz.volume}
                       >
-                        <Maximize className="size-4" />
+                        {volume === 0 ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
                       </button>
-                    </TooltipTrigger>
-                    <TooltipContent>{uz.fullscreen}</TooltipContent>
-                  </Tooltip>
-                </>
+                      <Slider
+                        value={[volume]}
+                        max={1}
+                        step={0.01}
+                        onValueChange={(v) => setVolume(v[0])}
+                        className="w-24"
+                      />
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={requestFullscreen}
+                            className="size-8 rounded-md bg-white/10 hover:bg-white/20 grid place-items-center text-white"
+                            aria-label={uz.fullscreen}
+                          >
+                            <Maximize className="size-4" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>{uz.fullscreen}</TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </div>
+                </div>
               )}
 
-              {/* Buffering overlay */}
               {bufferingName && (
                 <div className="absolute inset-0 bg-black/70 grid place-items-center backdrop-blur-sm">
                   <div className="text-center px-6">
@@ -566,7 +677,6 @@ function RoomPage() {
                 </div>
               )}
 
-              {/* Floating emojis */}
               <div className="pointer-events-none absolute inset-0 overflow-hidden">
                 {floatingEmojis.map((e) => (
                   <div
@@ -580,20 +690,10 @@ function RoomPage() {
               </div>
             </div>
 
-            {/* Controls row */}
+            {/* Host controls + reactions */}
             <div className="flex items-center gap-2 flex-wrap">
               {isHost && (
                 <>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button size="sm" onClick={togglePlay} disabled={!room.video_url}>
-                        {room.is_playing ? <Pause className="size-4 mr-1.5" /> : <Play className="size-4 mr-1.5" />}
-                        {room.is_playing ? "Pauza" : "O'ynatish"}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{room.is_playing ? "To'xtatish" : "Boshlash"}</TooltipContent>
-                  </Tooltip>
-
                   <label>
                     <input
                       type="file"
@@ -661,7 +761,6 @@ function RoomPage() {
               </div>
             </div>
 
-            {/* Upload progress */}
             {uploadProgress !== null && (
               <div className="rounded-lg border bg-surface p-3">
                 <div className="flex justify-between text-xs mb-1.5">
@@ -683,7 +782,7 @@ function RoomPage() {
             />
           )}
 
-          {/* Sidebar — overlay on mobile, inline on md+ */}
+          {/* Sidebar — cameras pinned top, chat fills remaining */}
           <aside
             className={`bg-surface flex flex-col shrink-0
               absolute md:static inset-y-0 right-0 z-20 w-[85%] max-w-sm md:w-80
@@ -692,66 +791,32 @@ function RoomPage() {
               md:translate-x-0
               ${theaterMode ? "md:w-0 md:opacity-0 md:overflow-hidden" : "md:opacity-100"}`}
           >
-            <Tabs defaultValue="cameras" className="flex flex-col h-full min-h-0">
-              <TabsList className="grid grid-cols-2 m-2">
-                <TabsTrigger value="cameras">{uz.cameras}</TabsTrigger>
-                <TabsTrigger value="chat">{uz.chat}</TabsTrigger>
-              </TabsList>
-              <TabsContent value="cameras" className="flex-1 overflow-y-auto p-3 mt-0">
-                <CameraGrid
-                  localStream={peerMesh.localStream}
-                  localSpeaking={peerMesh.localSpeaking}
-                  peers={peerMesh.peers}
-                  profiles={profiles}
-                  permError={peerMesh.permError}
-                  micEnabled={peerMesh.micEnabled}
-                  camEnabled={peerMesh.camEnabled}
-                  onToggleMic={peerMesh.toggleMic}
-                  onToggleCam={peerMesh.toggleCam}
-                  onRetry={peerMesh.retryPermission}
-                  selfId={user.id}
-                  selfName={selfName}
-                  isHost={isHost}
-                  hostId={room.host_id}
-                  onForceMute={handleForceMute}
-                  onKick={handleKick}
-                />
-                <div className="mt-4 border-t pt-3">
-                  <h4 className="text-xs uppercase text-muted-foreground font-medium mb-2">{uz.participants}</h4>
-                  <ul className="space-y-1">
-                    {participantIds.map((id) => {
-                      const p = profiles[id];
-                      const status = statusMap[id] ?? "tayyor";
-                      const isThisHost = id === room.host_id;
-                      return (
-                        <li key={id} className="flex items-center gap-2 text-sm">
-                          <div className="size-7 rounded-full bg-primary/20 grid place-items-center text-xs font-bold text-primary">
-                            {(p?.display_name ?? "?")[0].toUpperCase()}
-                          </div>
-                          <span className="truncate flex-1">{p?.display_name ?? "Mehmon"}{isThisHost && " 👑"}</span>
-                          <span
-                            className={`text-[10px] px-1.5 py-0.5 rounded ${
-                              status === "yuklanmoqda" ? "bg-yellow-500/20 text-yellow-300" :
-                              status === "tayyor" ? "bg-success/20 text-success" :
-                              "bg-muted text-muted-foreground"
-                            }`}
-                          >
-                            {status === "yuklanmoqda" ? uz.loadingStatus : status === "tayyor" ? uz.ready : uz.joined}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              </TabsContent>
-              <TabsContent value="chat" className="flex-1 mt-0 min-h-0">
-                <ChatPanel roomId={roomId} userId={user.id} profiles={profiles} />
-              </TabsContent>
-            </Tabs>
+            <div className="p-3 border-b shrink-0 max-h-[45%] overflow-y-auto">
+              <CameraGrid
+                localStream={peerMesh.localStream}
+                localSpeaking={peerMesh.localSpeaking}
+                peers={peerMesh.peers}
+                profiles={profiles}
+                permError={peerMesh.permError}
+                micEnabled={peerMesh.micEnabled}
+                camEnabled={peerMesh.camEnabled}
+                onToggleMic={peerMesh.toggleMic}
+                onToggleCam={peerMesh.toggleCam}
+                onRetry={peerMesh.retryPermission}
+                selfId={user.id}
+                selfName={selfName}
+                isHost={isHost}
+                hostId={room.host_id}
+                onForceMute={handleForceMute}
+                onKick={handleKick}
+              />
+            </div>
+            <div className="flex-1 min-h-0">
+              <ChatPanel roomId={roomId} userId={user.id} profiles={profiles} />
+            </div>
           </aside>
         </div>
 
-        {/* Nuke confirmation */}
         <AlertDialog open={nukeOpen} onOpenChange={setNukeOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
