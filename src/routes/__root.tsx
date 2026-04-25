@@ -1,5 +1,6 @@
 import { Outlet, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 import { Toaster } from "@/components/ui/sonner";
+import { GlobalFriendsProvider } from "@/components/GlobalFriendsProvider";
 import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
@@ -38,7 +39,11 @@ export const Route = createRootRoute({
     links: [{ rel: "stylesheet", href: appCss }],
   }),
   shellComponent: RootShell,
-  component: () => <Outlet />,
+  component: () => (
+    <GlobalFriendsProvider>
+      <Outlet />
+    </GlobalFriendsProvider>
+  ),
   notFoundComponent: NotFoundComponent,
 });
 
