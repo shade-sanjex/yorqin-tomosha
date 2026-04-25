@@ -14,11 +14,11 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
-type Mode = "tabs" | "forgot-email" | "forgot-otp";
+type Mode = "tabs" | "forgot-email" | "forgot-otp" | "reset-new";
 
 function PasswordInput(props: {
   id: string;
-  name: string;
+  name?: string;
   required?: boolean;
   minLength?: number;
   autoComplete?: string;
@@ -46,7 +46,7 @@ function PasswordInput(props: {
 }
 
 function AuthPage() {
-  const { user, loading } = useAuth();
+  const { user, loading, recoveryMode } = useAuth();
   const navigate = useNavigate();
   const [submitting, setSubmitting] = useState(false);
   const [mode, setMode] = useState<Mode>("tabs");
@@ -54,9 +54,17 @@ function AuthPage() {
   const [otp, setOtp] = useState("");
   const [resetPass, setResetPass] = useState("");
 
+  // Switch to "reset-new" form whenever PASSWORD_RECOVERY fires
   useEffect(() => {
-    if (!loading && user) navigate({ to: "/dashboard" });
-  }, [loading, user, navigate]);
+    if (recoveryMode) {
+      setMode("reset-new");
+    }
+  }, [recoveryMode]);
+
+  // Only redirect to dashboard if we are NOT in recovery mode
+  useEffect(() => {
+    if (!loading && user && !recoveryMode) navigate({ to: "/dashboard" });
+  }, [loading, user, navigate, recoveryMode]);
 
   const onSignIn = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -102,7 +110,9 @@ function AuthPage() {
     e.preventDefault();
     if (!forgotEmail) return;
     setSubmitting(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail);
+    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+      redirectTo: `${window.location.origin}/auth`,
+    });
     setSubmitting(false);
     if (error) {
       toast.error(uz.authError);
@@ -140,12 +150,33 @@ function AuthPage() {
       return;
     }
     toast.success(uz.passwordUpdated);
-    // Sign out so user logs in with new password
     await supabase.auth.signOut();
     setMode("tabs");
     setForgotEmail("");
     setOtp("");
     setResetPass("");
+  };
+
+  // Recovery via email link — user is signed in (recovery session); just update password
+  const onResetNew = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (resetPass.length < 6) {
+      toast.error(uz.weakPassword);
+      return;
+    }
+    setSubmitting(true);
+    const { error } = await supabase.auth.updateUser({ password: resetPass });
+    setSubmitting(false);
+    if (error) {
+      toast.error(uz.authError);
+      return;
+    }
+    toast.success(uz.passwordUpdated);
+    await supabase.auth.signOut();
+    setResetPass("");
+    setMode("tabs");
+    // Force reload to clear recoveryMode flag cleanly
+    window.location.assign("/auth");
   };
 
   return (
@@ -157,57 +188,55 @@ function AuthPage() {
         </Link>
         <div className="rounded-2xl border bg-surface p-6 shadow-2xl">
           {mode === "tabs" && (
-            <>
-              <Tabs defaultValue="signin">
-                <TabsList className="grid grid-cols-2 w-full">
-                  <TabsTrigger value="signin">{uz.signIn}</TabsTrigger>
-                  <TabsTrigger value="signup">{uz.signUp}</TabsTrigger>
-                </TabsList>
+            <Tabs defaultValue="signin">
+              <TabsList className="grid grid-cols-2 w-full">
+                <TabsTrigger value="signin">{uz.signIn}</TabsTrigger>
+                <TabsTrigger value="signup">{uz.signUp}</TabsTrigger>
+              </TabsList>
 
-                <TabsContent value="signin">
-                  <form onSubmit={onSignIn} className="space-y-4 mt-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="si-email">{uz.email}</Label>
-                      <Input id="si-email" name="email" type="email" required autoComplete="email" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="si-pass">{uz.password}</Label>
-                      <PasswordInput id="si-pass" name="password" required autoComplete="current-password" />
-                    </div>
-                    <Button type="submit" disabled={submitting} className="w-full">
-                      {submitting ? <Loader2 className="size-4 animate-spin" /> : uz.signIn}
-                    </Button>
-                    <button
-                      type="button"
-                      onClick={() => setMode("forgot-email")}
-                      className="text-xs text-primary hover:underline w-full text-center"
-                    >
-                      {uz.forgotPassword}
-                    </button>
-                  </form>
-                </TabsContent>
+              <TabsContent value="signin">
+                <form onSubmit={onSignIn} className="space-y-4 mt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="si-email">{uz.email}</Label>
+                    <Input id="si-email" name="email" type="email" required autoComplete="email" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="si-pass">{uz.password}</Label>
+                    <PasswordInput id="si-pass" name="password" required autoComplete="current-password" />
+                  </div>
+                  <Button type="submit" disabled={submitting} className="w-full">
+                    {submitting ? <Loader2 className="size-4 animate-spin" /> : uz.signIn}
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => setMode("forgot-email")}
+                    className="text-xs text-primary hover:underline w-full text-center"
+                  >
+                    {uz.forgotPassword}
+                  </button>
+                </form>
+              </TabsContent>
 
-                <TabsContent value="signup">
-                  <form onSubmit={onSignUp} className="space-y-4 mt-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="su-name">{uz.displayName}</Label>
-                      <Input id="su-name" name="display_name" required minLength={2} maxLength={40} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="su-email">{uz.email}</Label>
-                      <Input id="su-email" name="email" type="email" required autoComplete="email" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="su-pass">{uz.password}</Label>
-                      <PasswordInput id="su-pass" name="password" required minLength={6} autoComplete="new-password" />
-                    </div>
-                    <Button type="submit" disabled={submitting} className="w-full">
-                      {submitting ? <Loader2 className="size-4 animate-spin" /> : uz.signUp}
-                    </Button>
-                  </form>
-                </TabsContent>
-              </Tabs>
-            </>
+              <TabsContent value="signup">
+                <form onSubmit={onSignUp} className="space-y-4 mt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="su-name">{uz.displayName}</Label>
+                    <Input id="su-name" name="display_name" required minLength={2} maxLength={40} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="su-email">{uz.email}</Label>
+                    <Input id="su-email" name="email" type="email" required autoComplete="email" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="su-pass">{uz.password}</Label>
+                    <PasswordInput id="su-pass" name="password" required minLength={6} autoComplete="new-password" />
+                  </div>
+                  <Button type="submit" disabled={submitting} className="w-full">
+                    {submitting ? <Loader2 className="size-4 animate-spin" /> : uz.signUp}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
           )}
 
           {mode === "forgot-email" && (
@@ -257,7 +286,6 @@ function AuthPage() {
                 <Label htmlFor="np">{uz.newPassword}</Label>
                 <PasswordInput
                   id="np"
-                  name="newpass"
                   required
                   minLength={6}
                   value={resetPass}
@@ -274,6 +302,26 @@ function AuthPage() {
               >
                 {uz.backToSignIn}
               </button>
+            </form>
+          )}
+
+          {mode === "reset-new" && (
+            <form onSubmit={onResetNew} className="space-y-4">
+              <h2 className="font-semibold text-lg">{uz.setNewPassword}</h2>
+              <p className="text-xs text-muted-foreground">{uz.recoveryHint}</p>
+              <div className="space-y-2">
+                <Label htmlFor="rn-pass">{uz.newPassword}</Label>
+                <PasswordInput
+                  id="rn-pass"
+                  required
+                  minLength={6}
+                  value={resetPass}
+                  onChange={(e) => setResetPass(e.target.value)}
+                />
+              </div>
+              <Button type="submit" disabled={submitting} className="w-full">
+                {submitting ? <Loader2 className="size-4 animate-spin" /> : uz.updatePassword}
+              </Button>
             </form>
           )}
         </div>
