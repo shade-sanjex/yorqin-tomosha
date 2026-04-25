@@ -13,6 +13,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ServerMediaManager } from "@/components/ServerMediaManager";
+import { FriendsModal } from "@/components/FriendsModal";
 
 export const Route = createFileRoute("/dashboard")({
   component: Dashboard,
@@ -107,6 +108,7 @@ function Dashboard() {
               </span>
             )}
             {isSuperAdmin && <ServerMediaManager />}
+            <FriendsModal />
             <Button variant="ghost" size="sm" onClick={signOut}>
               <LogOut className="size-4 mr-1.5" /> {uz.signOut}
             </Button>

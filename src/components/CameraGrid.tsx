@@ -37,13 +37,17 @@ interface VideoTileProps {
   speaking: boolean;
   isSelf?: boolean;
   isHost?: boolean;
+  /** Explicit camera-on flag from peer signal; for self use local camEnabled */
+  camEnabled: boolean;
+  micEnabled: boolean;
   showHostMenu?: boolean;
   onForceMute?: () => void;
   onKick?: () => void;
 }
 
 function VideoTile({
-  stream, name, speaking, isSelf, isHost, showHostMenu, onForceMute, onKick,
+  stream, name, speaking, isSelf, isHost, camEnabled, micEnabled,
+  showHostMenu, onForceMute, onKick,
 }: VideoTileProps) {
   const ref = useRef<HTMLVideoElement>(null);
   const [locallyMuted, setLocallyMuted] = useState(false);
@@ -54,7 +58,6 @@ function VideoTile({
     }
   }, [stream]);
 
-  // Apply local mute (volume) to remote video element
   useEffect(() => {
     if (ref.current && !isSelf) {
       ref.current.muted = locallyMuted;
@@ -62,12 +65,14 @@ function VideoTile({
     }
   }, [locallyMuted, isSelf]);
 
-  const hasVideo = !!stream && stream.getVideoTracks().some((t) => t.enabled);
+  // Determine whether to show video element. For remote we trust peer's camEnabled signal AND
+  // a fallback check on track.enabled.
+  const trackEnabled = !!stream && stream.getVideoTracks().some((t) => t.enabled);
+  const showVideo = camEnabled && (isSelf ? trackEnabled || !!stream : trackEnabled);
 
   return (
     <div className={`relative aspect-video rounded-lg overflow-hidden bg-surface-2 border transition-shadow ${speaking ? "speaking-glow" : ""}`}>
-      {stream ? (
-        // Wrapper applies the mirror transform safely without affecting child layout
+      {stream && showVideo && (
         <div
           className="absolute inset-0"
           style={isSelf ? { transform: "rotateY(180deg)" } : undefined}
@@ -77,15 +82,29 @@ function VideoTile({
             autoPlay
             playsInline
             muted={isSelf || locallyMuted}
-            className={`w-full h-full object-cover ${hasVideo ? "" : "opacity-0"}`}
+            className="w-full h-full object-cover"
           />
         </div>
-      ) : null}
-      {!hasVideo && (
-        <div className="absolute inset-0 grid place-items-center">
-          <div className="size-12 rounded-full bg-primary/20 grid place-items-center text-primary font-bold">
-            {name[0]?.toUpperCase() ?? "?"}
+      )}
+
+      {!showVideo && (
+        <div className="absolute inset-0 grid place-items-center bg-surface-2">
+          <div className="text-center">
+            <div className="size-14 rounded-full bg-primary/20 grid place-items-center text-primary font-bold text-lg mx-auto mb-2">
+              {name[0]?.toUpperCase() ?? "?"}
+            </div>
+            <p className="text-[11px] text-muted-foreground flex items-center gap-1 justify-center">
+              <VideoOff className="size-3" />
+              {uz.cameraOffLabel}
+            </p>
           </div>
+        </div>
+      )}
+
+      {/* Mic indicator */}
+      {!micEnabled && (
+        <div className="absolute top-1 left-1 size-6 rounded-md bg-destructive/80 grid place-items-center text-white">
+          <MicOff className="size-3" />
         </div>
       )}
 
@@ -171,6 +190,8 @@ export function CameraGrid({
             speaking={localSpeaking}
             isSelf
             isHost={selfId === hostId}
+            camEnabled={camEnabled}
+            micEnabled={micEnabled}
           />
           {peerEntries.map((p) => (
             <VideoTile
@@ -179,6 +200,8 @@ export function CameraGrid({
               name={profiles[p.userId]?.display_name ?? "Mehmon"}
               speaking={p.speaking}
               isHost={p.userId === hostId}
+              camEnabled={p.camEnabled}
+              micEnabled={p.micEnabled}
               showHostMenu={isHost && p.userId !== selfId}
               onForceMute={() => onForceMute(p.userId)}
               onKick={() => onKick(p.userId)}

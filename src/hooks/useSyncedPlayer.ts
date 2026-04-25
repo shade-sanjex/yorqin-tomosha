@@ -17,10 +17,14 @@ interface UseSyncedPlayerArgs {
   videoRef: React.RefObject<HTMLVideoElement | null>;
   initialState: PlayerState;
   onBufferingMapChange: (map: Record<string, ParticipantStatus>) => void;
+  onRemotePlayerChange?: (
+    next: { isPlaying: boolean; playbackTime: number },
+    previous: { isPlaying: boolean; playbackTime: number }
+  ) => void;
 }
 
-const SYNC_THRESHOLD = 0.6; // seconds
-const HOST_BROADCAST_INTERVAL = 1500; // ms
+const SYNC_THRESHOLD = 0.6;
+const HOST_BROADCAST_INTERVAL = 1500;
 
 export function useSyncedPlayer({
   roomId,
@@ -29,14 +33,16 @@ export function useSyncedPlayer({
   videoRef,
   initialState,
   onBufferingMapChange,
+  onRemotePlayerChange,
 }: UseSyncedPlayerArgs) {
   const [playerState, setPlayerState] = useState<PlayerState>(initialState);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const isApplyingRemoteRef = useRef(false);
   const statusMapRef = useRef<Record<string, ParticipantStatus>>({});
   const myStatusRef = useRef<ParticipantStatus>("tayyor");
+  const onRemoteRef = useRef(onRemotePlayerChange);
+  useEffect(() => { onRemoteRef.current = onRemotePlayerChange; }, [onRemotePlayerChange]);
 
-  // Update my status & broadcast
   const setMyStatus = useCallback(
     (status: ParticipantStatus) => {
       if (myStatusRef.current === status) return;
@@ -52,7 +58,6 @@ export function useSyncedPlayer({
     [userId, onBufferingMapChange]
   );
 
-  // Host: persist + broadcast state
   const broadcastState = useCallback(
     async (next: Partial<PlayerState>) => {
       if (!isHost) return;
@@ -63,6 +68,7 @@ export function useSyncedPlayer({
         videoUrl: next.videoUrl ?? playerState.videoUrl,
       };
       setPlayerState(state);
+      console.log("[Sync] broadcast", state.isPlaying ? "play" : "pause", state.playbackTime.toFixed(2));
       channelRef.current?.send({
         type: "broadcast",
         event: "player",
@@ -81,7 +87,6 @@ export function useSyncedPlayer({
     [isHost, roomId, videoRef, playerState.videoUrl]
   );
 
-  // Subscribe channel
   useEffect(() => {
     const ch = supabase.channel(`room:${roomId}:player`, {
       config: { broadcast: { self: false } },
@@ -91,7 +96,13 @@ export function useSyncedPlayer({
     ch.on("broadcast", { event: "player" }, ({ payload }) => {
       const p = payload as PlayerState;
       isApplyingRemoteRef.current = true;
-      setPlayerState(p);
+      setPlayerState((prev) => {
+        onRemoteRef.current?.(
+          { isPlaying: p.isPlaying, playbackTime: p.playbackTime },
+          { isPlaying: prev.isPlaying, playbackTime: prev.playbackTime }
+        );
+        return p;
+      });
       const v = videoRef.current;
       if (v) {
         if (Math.abs(v.currentTime - p.playbackTime) > SYNC_THRESHOLD) {
@@ -103,6 +114,7 @@ export function useSyncedPlayer({
           v.pause();
         }
       }
+      console.log("[Sync] applyRemote", p.isPlaying ? "play" : "pause");
       setTimeout(() => { isApplyingRemoteRef.current = false; }, 100);
     });
 
@@ -111,7 +123,6 @@ export function useSyncedPlayer({
       statusMapRef.current = { ...statusMapRef.current, [uid]: status };
       onBufferingMapChange({ ...statusMapRef.current });
 
-      // Host: if anyone is buffering, force pause everyone
       if (isHost) {
         const anyBuffering = Object.values(statusMapRef.current).some((s) => s === "yuklanmoqda");
         const v = videoRef.current;
@@ -124,7 +135,6 @@ export function useSyncedPlayer({
 
     ch.subscribe((status) => {
       if (status === "SUBSCRIBED") {
-        // announce my status
         ch.send({ type: "broadcast", event: "status", payload: { userId, status: myStatusRef.current } });
       }
     });
@@ -135,7 +145,6 @@ export function useSyncedPlayer({
     };
   }, [roomId, userId, isHost, videoRef, onBufferingMapChange, broadcastState]);
 
-  // Host periodic broadcast of time while playing
   useEffect(() => {
     if (!isHost) return;
     const id = window.setInterval(() => {
