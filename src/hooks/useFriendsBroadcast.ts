@@ -125,9 +125,10 @@ export function useFriendsBroadcast({ userId, displayName, enabled }: UseFriends
     });
 
     ch.subscribe(async (status) => {
+      console.log("[Presence Sync] channel status:", status);
       if (status === "SUBSCRIBED") {
-        await ch.track({ userId, displayName });
-        console.log("[Friends] presence tracked");
+        await ch.track({ userId, displayName: displayNameRef.current });
+        console.log("[Presence Sync] tracked", userId, displayNameRef.current);
       }
     });
 
@@ -136,7 +137,16 @@ export function useFriendsBroadcast({ userId, displayName, enabled }: UseFriends
       supabase.removeChannel(ch);
       channelRef.current = null;
     };
-  }, [enabled, userId, displayName]);
+  }, [enabled, userId]);
+
+  // Re-track when displayName changes without recreating the channel
+  useEffect(() => {
+    const ch = channelRef.current;
+    if (!ch || !userId) return;
+    ch.track({ userId, displayName }).then(() => {
+      console.log("[Presence Sync] re-tracked with new displayName", displayName);
+    }).catch(() => {});
+  }, [displayName, userId]);
 
   const sendFriendRequest = useCallback(
     (toId: string) => {
