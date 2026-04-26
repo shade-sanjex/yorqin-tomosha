@@ -190,6 +190,8 @@ export function usePeerMesh({
       pcsRef.current.delete(remoteId);
       console.log("[WebRTC] closed", remoteId);
     }
+    transceiversRef.current.delete(remoteId);
+    remoteStreamsRef.current.delete(remoteId);
     makingOfferRef.current.delete(remoteId);
     ignoreOfferRef.current.delete(remoteId);
     iceQueueRef.current.delete(remoteId);
@@ -215,12 +217,17 @@ export function usePeerMesh({
       localStreamRef.current = stream;
       setLocalStream(stream);
       attachAnalyser("__local__", stream);
-      // attach to existing PCs
-      pcsRef.current.forEach((pc) => {
-        stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+      const aTrack = stream.getAudioTracks()[0];
+      const vTrack = stream.getVideoTracks()[0];
+      // Attach to existing PCs via replaceTrack on pre-created transceivers
+      transceiversRef.current.forEach((tx, peerId) => {
+        if (aTrack) tx.audio.sender.replaceTrack(aTrack).catch((e) => console.warn("[WebRTC Error] replaceTrack audio", peerId, e));
+        if (vTrack) tx.video.sender.replaceTrack(vTrack).catch((e) => console.warn("[WebRTC Error] replaceTrack video", peerId, e));
+        console.log("[WebRTC] media attached after acquire", peerId);
       });
       return stream;
-    } catch {
+    } catch (e) {
+      console.warn("[WebRTC Error] getUserMedia failed", e);
       setPermError("perm");
       return null;
     }
