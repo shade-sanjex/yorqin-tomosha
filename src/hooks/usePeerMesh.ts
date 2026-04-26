@@ -240,7 +240,7 @@ export function usePeerMesh({
       setPermError("perm");
       return null;
     }
-  }, [attachAnalyser]);
+  }, [attachAnalyser, ensurePC, userId]);
 
   // Setup signaling channel + presence + media
   useEffect(() => {
