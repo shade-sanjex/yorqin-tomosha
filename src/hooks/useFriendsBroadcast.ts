@@ -54,6 +54,8 @@ export function useFriendsBroadcast({ userId, displayName, enabled }: UseFriends
   const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
   const [incomingInvites, setIncomingInvites] = useState<RoomInvite[]>([]);
   const channelRef = useRef<RealtimeChannel | null>(null);
+  const displayNameRef = useRef(displayName);
+  useEffect(() => { displayNameRef.current = displayName; }, [displayName]);
 
   // Load friends from localStorage
   useEffect(() => {
