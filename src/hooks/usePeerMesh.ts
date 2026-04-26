@@ -185,7 +185,7 @@ export function usePeerMesh({
       pcsRef.current.delete(remoteId);
       console.log("[WebRTC] closed", remoteId);
     }
-    transceiversRef.current.delete(remoteId);
+    knownRemotesRef.current.delete(remoteId);
     remoteStreamsRef.current.delete(remoteId);
     makingOfferRef.current.delete(remoteId);
     ignoreOfferRef.current.delete(remoteId);
@@ -212,13 +212,27 @@ export function usePeerMesh({
       localStreamRef.current = stream;
       setLocalStream(stream);
       attachAnalyser("__local__", stream);
-      const aTrack = stream.getAudioTracks()[0];
-      const vTrack = stream.getVideoTracks()[0];
-      // Attach to existing PCs via replaceTrack on pre-created transceivers
-      transceiversRef.current.forEach((tx, peerId) => {
-        if (aTrack) tx.audio.sender.replaceTrack(aTrack).catch((e) => console.warn("[WebRTC Error] replaceTrack audio", peerId, e));
-        if (vTrack) tx.video.sender.replaceTrack(vTrack).catch((e) => console.warn("[WebRTC Error] replaceTrack video", peerId, e));
-        console.log("[WebRTC] media attached after acquire", peerId);
+      // Attach tracks to any existing PCs (will trigger renegotiation)
+      pcsRef.current.forEach((pc, peerId) => {
+        const senders = pc.getSenders();
+        stream.getTracks().forEach((t) => {
+          const hasSender = senders.some((s) => s.track?.id === t.id);
+          if (!hasSender) {
+            try {
+              pc.addTrack(t, stream);
+              console.log("[WebRTC] track added after acquire", peerId, t.kind);
+            } catch (e) {
+              console.warn("[WebRTC Error] addTrack after acquire", peerId, e);
+            }
+          }
+        });
+      });
+      // Initiate offers to any known remotes that we should call (lower id wins)
+      knownRemotesRef.current.forEach((rid) => {
+        if (!pcsRef.current.has(rid) && userId < rid) {
+          console.log("[WebRTC] post-media initiate", rid);
+          ensurePCRef.current?.(rid);
+        }
       });
       return stream;
     } catch (e) {
