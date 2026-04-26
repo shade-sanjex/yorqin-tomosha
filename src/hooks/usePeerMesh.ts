@@ -357,13 +357,16 @@ export function usePeerMesh({
         const remoteIds = new Set<string>();
         Object.keys(state).forEach((key) => { if (key !== userId) remoteIds.add(key); });
 
+        // Track known remotes so post-media initiation can find them
+        remoteIds.forEach((rid) => knownRemotesRef.current.add(rid));
+
         // Initiate to remotes where we are the lower-id (deterministic)
+        // Only initiate once we have local media — otherwise the offer has no tracks.
+        const haveMedia = !!localStreamRef.current;
         remoteIds.forEach((rid) => {
-          if (!pcsRef.current.has(rid) && userId < rid) {
+          if (!pcsRef.current.has(rid) && userId < rid && haveMedia) {
             console.log("[WebRTC] presence-sync initiate", rid);
-            ensurePC(rid); // onnegotiationneeded fires automatically when tracks present
-          } else if (!pcsRef.current.has(rid)) {
-            // wait for the other side to initiate; still create PC lazily on offer
+            ensurePC(rid);
           }
         });
 
@@ -411,7 +414,7 @@ export function usePeerMesh({
       channelRef.current = null;
       pcsRef.current.forEach((pc) => pc.close());
       pcsRef.current.clear();
-      transceiversRef.current.clear();
+      knownRemotesRef.current.clear();
       remoteStreamsRef.current.clear();
       makingOfferRef.current.clear();
       ignoreOfferRef.current.clear();
