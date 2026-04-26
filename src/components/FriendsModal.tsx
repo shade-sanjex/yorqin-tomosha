@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useFriends } from "@/components/GlobalFriendsProvider";
+import { useFriendProfiles } from "@/hooks/useFriendProfiles";
 import { useAuth } from "@/hooks/useAuth";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
@@ -19,7 +20,8 @@ interface SearchResult {
 
 export function FriendsModal() {
   const { user } = useAuth();
-  const { friends, onlineUsers, incomingRequests, sendFriendRequest, acceptFriend, declineFriend, removeFriend } = useFriends();
+  const { friends, incomingRequests, sendFriendRequest, acceptFriend, declineFriend, removeFriend } = useFriends();
+  const profiles = useFriendProfiles(friends);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
