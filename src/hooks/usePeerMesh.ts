@@ -107,21 +107,17 @@ export function usePeerMesh({
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     pcsRef.current.set(remoteId, pc);
 
-    // Pre-add sendrecv transceivers so SDP always negotiates both directions,
-    // even before getUserMedia resolves.
-    const audioTx = pc.addTransceiver("audio", { direction: "sendrecv" });
-    const videoTx = pc.addTransceiver("video", { direction: "sendrecv" });
-    transceiversRef.current.set(remoteId, { audio: audioTx, video: videoTx });
-    console.log("[WebRTC] transceivers created", remoteId);
-
-    // If media already available, attach via replaceTrack (no extra m-line)
+    // Attach local tracks if available — this is what makes media flow
     const local = localStreamRef.current;
     if (local) {
-      const aTrack = local.getAudioTracks()[0];
-      const vTrack = local.getVideoTracks()[0];
-      if (aTrack) audioTx.sender.replaceTrack(aTrack).catch((e) => console.warn("[WebRTC Error] replaceTrack audio", e));
-      if (vTrack) videoTx.sender.replaceTrack(vTrack).catch((e) => console.warn("[WebRTC Error] replaceTrack video", e));
-      console.log("[WebRTC] tracks attached on PC create", remoteId);
+      local.getTracks().forEach((t) => {
+        try {
+          pc.addTrack(t, local);
+        } catch (e) {
+          console.warn("[WebRTC Error] addTrack on PC create", remoteId, e);
+        }
+      });
+      console.log("[WebRTC] tracks attached on PC create", remoteId, local.getTracks().map((t) => t.kind));
     }
 
     pc.onicecandidate = (ev) => {
