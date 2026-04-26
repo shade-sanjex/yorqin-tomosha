@@ -125,16 +125,15 @@ export function usePeerMesh({
     };
 
     pc.ontrack = (ev) => {
-      // Accumulate audio + video into a single per-peer MediaStream so we
-      // never lose a track when audio/video arrive in separate events.
-      let stream = remoteStreamsRef.current.get(remoteId);
+      // Prefer the stream provided by the sender; fall back to per-peer accumulation.
+      let stream = ev.streams[0];
       if (!stream) {
-        stream = new MediaStream();
-        remoteStreamsRef.current.set(remoteId, stream);
+        stream = remoteStreamsRef.current.get(remoteId) ?? new MediaStream();
+        const already = stream.getTracks().some((t) => t.id === ev.track.id);
+        if (!already) stream.addTrack(ev.track);
       }
-      const already = stream.getTracks().some((t) => t.id === ev.track.id);
-      if (!already) stream.addTrack(ev.track);
-      console.log("[WebRTC] ontrack", remoteId, ev.track.kind, "total tracks:", stream.getTracks().length);
+      remoteStreamsRef.current.set(remoteId, stream);
+      console.log("[WebRTC] Stream attached", remoteId, stream.getTracks().map((t) => t.kind));
 
       ev.track.onunmute = () => console.log("[WebRTC] track unmute", remoteId, ev.track.kind);
       ev.track.onended = () => console.log("[WebRTC] track ended", remoteId, ev.track.kind);
