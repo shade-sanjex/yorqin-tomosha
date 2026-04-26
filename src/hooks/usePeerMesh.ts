@@ -49,8 +49,8 @@ export function usePeerMesh({
   const [localSpeaking, setLocalSpeaking] = useState(false);
 
   const pcsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
-  const transceiversRef = useRef<Map<string, { audio: RTCRtpTransceiver; video: RTCRtpTransceiver }>>(new Map());
   const remoteStreamsRef = useRef<Map<string, MediaStream>>(new Map());
+  const knownRemotesRef = useRef<Set<string>>(new Set());
   const makingOfferRef = useRef<Map<string, boolean>>(new Map());
   const ignoreOfferRef = useRef<Map<string, boolean>>(new Map());
   const iceQueueRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
