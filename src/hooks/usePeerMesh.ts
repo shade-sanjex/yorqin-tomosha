@@ -231,7 +231,7 @@ export function usePeerMesh({
       knownRemotesRef.current.forEach((rid) => {
         if (!pcsRef.current.has(rid) && userId < rid) {
           console.log("[WebRTC] post-media initiate", rid);
-          ensurePCRef.current?.(rid);
+          ensurePC(rid);
         }
       });
       return stream;
