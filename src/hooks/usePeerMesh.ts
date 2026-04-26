@@ -402,6 +402,8 @@ export function usePeerMesh({
       channelRef.current = null;
       pcsRef.current.forEach((pc) => pc.close());
       pcsRef.current.clear();
+      transceiversRef.current.clear();
+      remoteStreamsRef.current.clear();
       makingOfferRef.current.clear();
       ignoreOfferRef.current.clear();
       iceQueueRef.current.clear();
