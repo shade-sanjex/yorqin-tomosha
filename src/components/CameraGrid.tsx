@@ -55,8 +55,9 @@ function VideoTile({
   useEffect(() => {
     if (ref.current && stream) {
       ref.current.srcObject = stream;
+      console.log("[WebRTC] Stream attached to <video>", name, stream.id, stream.getTracks().map((t) => t.kind));
     }
-  }, [stream]);
+  }, [stream, name]);
 
   useEffect(() => {
     if (ref.current && !isSelf) {

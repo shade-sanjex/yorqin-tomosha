@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useFriends } from "@/components/GlobalFriendsProvider";
+import { useFriendProfiles } from "@/hooks/useFriendProfiles";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription,
 } from "@/components/ui/dialog";
@@ -14,12 +15,9 @@ interface InviteFriendsDialogProps {
 }
 
 export function InviteFriendsDialog({ roomId, roomName }: InviteFriendsDialogProps) {
-  const { friends, onlineUsers, sendInvite } = useFriends();
+  const { friends, sendInvite } = useFriends();
+  const profiles = useFriendProfiles(friends);
   const [open, setOpen] = useState(false);
-
-  const onlineFriends = friends
-    .map((id) => onlineUsers[id])
-    .filter((u): u is { userId: string; displayName: string } => !!u);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -34,32 +32,30 @@ export function InviteFriendsDialog({ roomId, roomName }: InviteFriendsDialogPro
           <DialogTitle>{uz.inviteFriends}</DialogTitle>
           <DialogDescription>{roomName}</DialogDescription>
         </DialogHeader>
-        {onlineFriends.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-6">
-            {friends.length === 0 ? uz.noFriends : uz.noOnlineFriends}
-          </p>
+        {friends.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">{uz.noFriends}</p>
         ) : (
           <ul className="space-y-2 max-h-80 overflow-y-auto">
-            {onlineFriends.map((f) => (
-              <li key={f.userId} className="flex items-center gap-2 p-2 rounded-md bg-surface-2">
-                <div className="relative">
+            {friends.map((fid) => {
+              const name = profiles[fid]?.display_name ?? "Foydalanuvchi";
+              return (
+                <li key={fid} className="flex items-center gap-2 p-2 rounded-md bg-surface-2">
                   <div className="size-8 rounded-full bg-primary/20 grid place-items-center text-primary text-xs font-bold">
-                    {f.displayName[0]?.toUpperCase()}
+                    {name[0]?.toUpperCase()}
                   </div>
-                  <span className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-surface-2 bg-success" />
-                </div>
-                <span className="flex-1 text-sm truncate">{f.displayName}</span>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    sendInvite(f.userId, roomId, roomName);
-                    toast.success(uz.inviteSent(f.displayName));
-                  }}
-                >
-                  <Send className="size-3.5 mr-1" /> {uz.invite}
-                </Button>
-              </li>
-            ))}
+                  <span className="flex-1 text-sm truncate">{name}</span>
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      sendInvite(fid, roomId, roomName);
+                      toast.success(uz.inviteSent(name));
+                    }}
+                  >
+                    <Send className="size-3.5 mr-1" /> {uz.invite}
+                  </Button>
+                </li>
+              );
+            })}
           </ul>
         )}
       </DialogContent>
