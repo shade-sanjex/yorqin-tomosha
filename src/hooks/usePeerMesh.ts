@@ -49,8 +49,8 @@ export function usePeerMesh({
   const [localSpeaking, setLocalSpeaking] = useState(false);
 
   const pcsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
-  const transceiversRef = useRef<Map<string, { audio: RTCRtpTransceiver; video: RTCRtpTransceiver }>>(new Map());
   const remoteStreamsRef = useRef<Map<string, MediaStream>>(new Map());
+  const knownRemotesRef = useRef<Set<string>>(new Set());
   const makingOfferRef = useRef<Map<string, boolean>>(new Map());
   const ignoreOfferRef = useRef<Map<string, boolean>>(new Map());
   const iceQueueRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
@@ -107,21 +107,17 @@ export function usePeerMesh({
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     pcsRef.current.set(remoteId, pc);
 
-    // Pre-add sendrecv transceivers so SDP always negotiates both directions,
-    // even before getUserMedia resolves.
-    const audioTx = pc.addTransceiver("audio", { direction: "sendrecv" });
-    const videoTx = pc.addTransceiver("video", { direction: "sendrecv" });
-    transceiversRef.current.set(remoteId, { audio: audioTx, video: videoTx });
-    console.log("[WebRTC] transceivers created", remoteId);
-
-    // If media already available, attach via replaceTrack (no extra m-line)
+    // Attach local tracks if available — this is what makes media flow
     const local = localStreamRef.current;
     if (local) {
-      const aTrack = local.getAudioTracks()[0];
-      const vTrack = local.getVideoTracks()[0];
-      if (aTrack) audioTx.sender.replaceTrack(aTrack).catch((e) => console.warn("[WebRTC Error] replaceTrack audio", e));
-      if (vTrack) videoTx.sender.replaceTrack(vTrack).catch((e) => console.warn("[WebRTC Error] replaceTrack video", e));
-      console.log("[WebRTC] tracks attached on PC create", remoteId);
+      local.getTracks().forEach((t) => {
+        try {
+          pc.addTrack(t, local);
+        } catch (e) {
+          console.warn("[WebRTC Error] addTrack on PC create", remoteId, e);
+        }
+      });
+      console.log("[WebRTC] tracks attached on PC create", remoteId, local.getTracks().map((t) => t.kind));
     }
 
     pc.onicecandidate = (ev) => {
@@ -129,16 +125,15 @@ export function usePeerMesh({
     };
 
     pc.ontrack = (ev) => {
-      // Accumulate audio + video into a single per-peer MediaStream so we
-      // never lose a track when audio/video arrive in separate events.
-      let stream = remoteStreamsRef.current.get(remoteId);
+      // Prefer the stream provided by the sender; fall back to per-peer accumulation.
+      let stream = ev.streams[0];
       if (!stream) {
-        stream = new MediaStream();
-        remoteStreamsRef.current.set(remoteId, stream);
+        stream = remoteStreamsRef.current.get(remoteId) ?? new MediaStream();
+        const already = stream.getTracks().some((t) => t.id === ev.track.id);
+        if (!already) stream.addTrack(ev.track);
       }
-      const already = stream.getTracks().some((t) => t.id === ev.track.id);
-      if (!already) stream.addTrack(ev.track);
-      console.log("[WebRTC] ontrack", remoteId, ev.track.kind, "total tracks:", stream.getTracks().length);
+      remoteStreamsRef.current.set(remoteId, stream);
+      console.log("[WebRTC] Stream attached", remoteId, stream.getTracks().map((t) => t.kind));
 
       ev.track.onunmute = () => console.log("[WebRTC] track unmute", remoteId, ev.track.kind);
       ev.track.onended = () => console.log("[WebRTC] track ended", remoteId, ev.track.kind);
@@ -190,7 +185,7 @@ export function usePeerMesh({
       pcsRef.current.delete(remoteId);
       console.log("[WebRTC] closed", remoteId);
     }
-    transceiversRef.current.delete(remoteId);
+    knownRemotesRef.current.delete(remoteId);
     remoteStreamsRef.current.delete(remoteId);
     makingOfferRef.current.delete(remoteId);
     ignoreOfferRef.current.delete(remoteId);
@@ -217,13 +212,27 @@ export function usePeerMesh({
       localStreamRef.current = stream;
       setLocalStream(stream);
       attachAnalyser("__local__", stream);
-      const aTrack = stream.getAudioTracks()[0];
-      const vTrack = stream.getVideoTracks()[0];
-      // Attach to existing PCs via replaceTrack on pre-created transceivers
-      transceiversRef.current.forEach((tx, peerId) => {
-        if (aTrack) tx.audio.sender.replaceTrack(aTrack).catch((e) => console.warn("[WebRTC Error] replaceTrack audio", peerId, e));
-        if (vTrack) tx.video.sender.replaceTrack(vTrack).catch((e) => console.warn("[WebRTC Error] replaceTrack video", peerId, e));
-        console.log("[WebRTC] media attached after acquire", peerId);
+      // Attach tracks to any existing PCs (will trigger renegotiation)
+      pcsRef.current.forEach((pc, peerId) => {
+        const senders = pc.getSenders();
+        stream.getTracks().forEach((t) => {
+          const hasSender = senders.some((s) => s.track?.id === t.id);
+          if (!hasSender) {
+            try {
+              pc.addTrack(t, stream);
+              console.log("[WebRTC] track added after acquire", peerId, t.kind);
+            } catch (e) {
+              console.warn("[WebRTC Error] addTrack after acquire", peerId, e);
+            }
+          }
+        });
+      });
+      // Initiate offers to any known remotes that we should call (lower id wins)
+      knownRemotesRef.current.forEach((rid) => {
+        if (!pcsRef.current.has(rid) && userId < rid) {
+          console.log("[WebRTC] post-media initiate", rid);
+          ensurePC(rid);
+        }
       });
       return stream;
     } catch (e) {
@@ -231,7 +240,7 @@ export function usePeerMesh({
       setPermError("perm");
       return null;
     }
-  }, [attachAnalyser]);
+  }, [attachAnalyser, ensurePC, userId]);
 
   // Setup signaling channel + presence + media
   useEffect(() => {
@@ -348,13 +357,16 @@ export function usePeerMesh({
         const remoteIds = new Set<string>();
         Object.keys(state).forEach((key) => { if (key !== userId) remoteIds.add(key); });
 
+        // Track known remotes so post-media initiation can find them
+        remoteIds.forEach((rid) => knownRemotesRef.current.add(rid));
+
         // Initiate to remotes where we are the lower-id (deterministic)
+        // Only initiate once we have local media — otherwise the offer has no tracks.
+        const haveMedia = !!localStreamRef.current;
         remoteIds.forEach((rid) => {
-          if (!pcsRef.current.has(rid) && userId < rid) {
+          if (!pcsRef.current.has(rid) && userId < rid && haveMedia) {
             console.log("[WebRTC] presence-sync initiate", rid);
-            ensurePC(rid); // onnegotiationneeded fires automatically when tracks present
-          } else if (!pcsRef.current.has(rid)) {
-            // wait for the other side to initiate; still create PC lazily on offer
+            ensurePC(rid);
           }
         });
 
@@ -402,7 +414,7 @@ export function usePeerMesh({
       channelRef.current = null;
       pcsRef.current.forEach((pc) => pc.close());
       pcsRef.current.clear();
-      transceiversRef.current.clear();
+      knownRemotesRef.current.clear();
       remoteStreamsRef.current.clear();
       makingOfferRef.current.clear();
       ignoreOfferRef.current.clear();
