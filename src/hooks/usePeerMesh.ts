@@ -107,8 +107,21 @@ export function usePeerMesh({
     const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
     pcsRef.current.set(remoteId, pc);
 
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((t) => pc.addTrack(t, localStreamRef.current!));
+    // Pre-add sendrecv transceivers so SDP always negotiates both directions,
+    // even before getUserMedia resolves.
+    const audioTx = pc.addTransceiver("audio", { direction: "sendrecv" });
+    const videoTx = pc.addTransceiver("video", { direction: "sendrecv" });
+    transceiversRef.current.set(remoteId, { audio: audioTx, video: videoTx });
+    console.log("[WebRTC] transceivers created", remoteId);
+
+    // If media already available, attach via replaceTrack (no extra m-line)
+    const local = localStreamRef.current;
+    if (local) {
+      const aTrack = local.getAudioTracks()[0];
+      const vTrack = local.getVideoTracks()[0];
+      if (aTrack) audioTx.sender.replaceTrack(aTrack).catch((e) => console.warn("[WebRTC Error] replaceTrack audio", e));
+      if (vTrack) videoTx.sender.replaceTrack(vTrack).catch((e) => console.warn("[WebRTC Error] replaceTrack video", e));
+      console.log("[WebRTC] tracks attached on PC create", remoteId);
     }
 
     pc.onicecandidate = (ev) => {
@@ -116,19 +129,32 @@ export function usePeerMesh({
     };
 
     pc.ontrack = (ev) => {
-      const stream = ev.streams[0];
-      console.log("[WebRTC] ontrack", remoteId);
+      // Accumulate audio + video into a single per-peer MediaStream so we
+      // never lose a track when audio/video arrive in separate events.
+      let stream = remoteStreamsRef.current.get(remoteId);
+      if (!stream) {
+        stream = new MediaStream();
+        remoteStreamsRef.current.set(remoteId, stream);
+      }
+      const already = stream.getTracks().some((t) => t.id === ev.track.id);
+      if (!already) stream.addTrack(ev.track);
+      console.log("[WebRTC] ontrack", remoteId, ev.track.kind, "total tracks:", stream.getTracks().length);
+
+      ev.track.onunmute = () => console.log("[WebRTC] track unmute", remoteId, ev.track.kind);
+      ev.track.onended = () => console.log("[WebRTC] track ended", remoteId, ev.track.kind);
+
+      const finalStream = stream;
       setPeers((prev) => ({
         ...prev,
         [remoteId]: {
           userId: remoteId,
-          stream,
-          speaking: false,
+          stream: finalStream,
+          speaking: prev[remoteId]?.speaking ?? false,
           micEnabled: prev[remoteId]?.micEnabled ?? true,
           camEnabled: prev[remoteId]?.camEnabled ?? true,
         },
       }));
-      attachAnalyser(remoteId, stream);
+      attachAnalyser(remoteId, finalStream);
     };
 
     // Perfect negotiation: when negotiation is needed, create offer
@@ -141,7 +167,7 @@ export function usePeerMesh({
           sendSignal({ to: remoteId, kind: "offer", sdp: pc.localDescription });
         }
       } catch (e) {
-        console.warn("[WebRTC] negotiation error", remoteId, e);
+        console.warn("[WebRTC Error] negotiation error", remoteId, e);
       } finally {
         makingOfferRef.current.set(remoteId, false);
       }
