@@ -45,10 +45,6 @@ export function FriendsModal() {
       toast.info(uz.alreadyFriends);
       return;
     }
-    if (!onlineUsers[toId]) {
-      toast.warning(uz.userNotOnline);
-      // Still send — will be received when they connect later in same session
-    }
     sendFriendRequest(toId);
     toast.success(`${name}: ${uz.friendRequestSent}`);
   };
@@ -90,18 +86,13 @@ export function FriendsModal() {
             ) : (
               <ul className="space-y-2 max-h-80 overflow-y-auto">
                 {friends.map((fid) => {
-                  const isOnline = !!onlineUsers[fid];
-                  const name = onlineUsers[fid]?.displayName ?? fid.slice(0, 8);
+                  const name = profiles[fid]?.display_name ?? "Foydalanuvchi";
                   return (
                     <li key={fid} className="flex items-center gap-2 p-2 rounded-md bg-surface-2">
-                      <div className="relative">
-                        <div className="size-8 rounded-full bg-primary/20 grid place-items-center text-primary text-xs font-bold">
-                          {name[0]?.toUpperCase()}
-                        </div>
-                        <span className={`absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-surface-2 ${isOnline ? "bg-success" : "bg-muted-foreground"}`} />
+                      <div className="size-8 rounded-full bg-primary/20 grid place-items-center text-primary text-xs font-bold">
+                        {name[0]?.toUpperCase()}
                       </div>
                       <span className="flex-1 text-sm truncate">{name}</span>
-                      <span className="text-[10px] text-muted-foreground">{isOnline ? uz.online : uz.offline}</span>
                       <Button size="icon" variant="ghost" onClick={() => removeFriend(fid)} aria-label={uz.delete}>
                         <X className="size-3.5" />
                       </Button>
