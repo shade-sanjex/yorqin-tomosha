@@ -278,9 +278,12 @@ export function usePeerMesh({
             } else {
               await pc.setRemoteDescription(p.sdp);
             }
-            // flush ICE queue
-            const q = iceQueueRef.current.get(p.from) ?? [];
-            for (const c of q) { try { await pc.addIceCandidate(c); } catch { /* noop */ } }
+            // flush ICE queue (always after setRemoteDescription)
+            const q1 = iceQueueRef.current.get(p.from) ?? [];
+            for (const c of q1) {
+              try { await pc.addIceCandidate(c); }
+              catch (e) { console.warn("[WebRTC Error] ice add failed (offer flush)", p.from, e); }
+            }
             iceQueueRef.current.set(p.from, []);
 
             await pc.setLocalDescription();
@@ -292,19 +295,25 @@ export function usePeerMesh({
             if (pc.signalingState === "have-local-offer") {
               await pc.setRemoteDescription(p.sdp);
               console.log("[WebRTC] answer-applied", p.from);
-              const q = iceQueueRef.current.get(p.from) ?? [];
-              for (const c of q) { try { await pc.addIceCandidate(c); } catch { /* noop */ } }
+              const q2 = iceQueueRef.current.get(p.from) ?? [];
+              for (const c of q2) {
+                try { await pc.addIceCandidate(c); }
+                catch (e) { console.warn("[WebRTC Error] ice add failed (answer flush)", p.from, e); }
+              }
               iceQueueRef.current.set(p.from, []);
+            } else {
+              console.warn("[WebRTC Error] unexpected answer in state", pc.signalingState, p.from);
             }
           } else if (p.kind === "ice" && p.ice) {
             if (pc.remoteDescription && pc.remoteDescription.type) {
               try { await pc.addIceCandidate(p.ice); } catch (e) {
-                if (!ignoreOfferRef.current.get(p.from)) console.warn("[WebRTC] ice err", e);
+                if (!ignoreOfferRef.current.get(p.from)) console.warn("[WebRTC Error] ice add failed", p.from, e);
               }
             } else {
               const q = iceQueueRef.current.get(p.from) ?? [];
               q.push(p.ice);
               iceQueueRef.current.set(p.from, q);
+              console.log("[WebRTC] ice queued (no remote desc yet)", p.from, "queue size:", q.length);
             }
           }
         } catch (e) {
