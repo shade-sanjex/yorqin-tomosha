@@ -88,6 +88,7 @@ export function useFriendsBroadcast({ userId, displayName, enabled }: UseFriends
         const meta = arr[0] ?? {};
         next[key] = { userId: key, displayName: meta.displayName ?? "Foydalanuvchi" };
       });
+      console.log("[Presence Sync]", Object.keys(next), "online users");
       setOnlineUsers(next);
     });
 
