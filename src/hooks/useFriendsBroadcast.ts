@@ -132,7 +132,25 @@ export function useFriendsBroadcast({ userId, displayName, enabled }: UseFriends
       }
     });
 
+    // Telegram-style fast presence drop on tab close / visibility change
+    const onPageHide = () => {
+      ch.untrack().catch(() => {});
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        ch.untrack().catch(() => {});
+      } else if (document.visibilityState === "visible") {
+        ch.track({ userId, displayName: displayNameRef.current }).catch(() => {});
+      }
+    };
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("beforeunload", onPageHide);
+    document.addEventListener("visibilitychange", onVisibility);
+
     return () => {
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("beforeunload", onPageHide);
+      document.removeEventListener("visibilitychange", onVisibility);
       ch.untrack().catch(() => {});
       supabase.removeChannel(ch);
       channelRef.current = null;
