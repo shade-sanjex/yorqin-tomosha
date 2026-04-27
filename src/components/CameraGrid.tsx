@@ -1,99 +1,106 @@
 import { useEffect, useRef, useState } from "react";
-import type { PeerState } from "@/hooks/usePeerMesh";
-import type { ProfileLite } from "@/hooks/useProfiles";
+import {
+  useTracks,
+  useLocalParticipant,
+  useParticipants,
+  useConnectionState,
+  TrackReference,
+} from "@livekit/components-react";
+import { Track, ConnectionState, Participant } from "livekit-client";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Mic, MicOff, Video, VideoOff, AlertCircle, Volume2, VolumeX, MoreVertical, MicOff as ForceMuteIcon, UserX } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  Mic, MicOff, Video, VideoOff, Volume2, VolumeX,
+  MoreVertical, MicOff as ForceMuteIcon, UserX,
+  KeyRound, KeySquare, Loader2,
+} from "lucide-react";
 import { uz } from "@/lib/uz";
+import type { ProfileLite } from "@/hooks/useProfiles";
 
 interface CameraGridProps {
-  localStream: MediaStream | null;
-  localSpeaking: boolean;
-  peers: Record<string, PeerState>;
   profiles: Record<string, ProfileLite>;
-  permError: string | null;
-  micEnabled: boolean;
-  camEnabled: boolean;
-  onToggleMic: () => void;
-  onToggleCam: () => void;
-  onRetry: () => void;
   selfId: string;
-  selfName: string;
-  isHost: boolean;
   hostId: string;
+  controllers: string[];
+  isHost: boolean;
   onForceMute: (userId: string) => void;
   onKick: (userId: string) => void;
+  onToggleControl: (userId: string) => void;
 }
 
-interface VideoTileProps {
-  stream: MediaStream | null;
-  name: string;
-  speaking: boolean;
-  isSelf?: boolean;
-  isHost?: boolean;
-  /** Explicit camera-on flag from peer signal; for self use local camEnabled */
-  camEnabled: boolean;
+interface TileProps {
+  participant: Participant;
+  videoTrack?: TrackReference;
   micEnabled: boolean;
-  showHostMenu?: boolean;
-  onForceMute?: () => void;
-  onKick?: () => void;
+  camEnabled: boolean;
+  isSelf: boolean;
+  isHost: boolean;
+  isController: boolean;
+  profile?: ProfileLite;
+  showHostMenu: boolean;
+  onForceMute: () => void;
+  onKick: () => void;
+  onToggleControl: () => void;
 }
 
 function VideoTile({
-  stream, name, speaking, isSelf, isHost, camEnabled, micEnabled,
-  showHostMenu, onForceMute, onKick,
-}: VideoTileProps) {
-  const ref = useRef<HTMLVideoElement>(null);
+  participant, videoTrack, micEnabled, camEnabled,
+  isSelf, isHost, isController, profile, showHostMenu,
+  onForceMute, onKick, onToggleControl,
+}: TileProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [locallyMuted, setLocallyMuted] = useState(false);
 
+  // Attach LiveKit video track to <video> element
   useEffect(() => {
-    if (ref.current && stream) {
-      ref.current.srcObject = stream;
-      console.log("[WebRTC] Stream attached to <video>", name, stream.id, stream.getTracks().map((t) => t.kind));
+    const el = videoRef.current;
+    if (!el) return;
+    const pub = videoTrack?.publication;
+    const track = pub?.track;
+    if (track && camEnabled) {
+      track.attach(el);
+      console.log("[LiveKit] video track attached to <video>", participant.identity);
+      return () => {
+        track.detach(el);
+      };
     }
-  }, [stream, name]);
+  }, [videoTrack, camEnabled, participant.identity]);
 
-  useEffect(() => {
-    if (ref.current && !isSelf) {
-      ref.current.muted = locallyMuted;
-      ref.current.volume = locallyMuted ? 0 : 1;
-    }
-  }, [locallyMuted, isSelf]);
-
-  // Determine whether to show video element. For remote we trust peer's camEnabled signal AND
-  // a fallback check on track.enabled.
-  const trackEnabled = !!stream && stream.getVideoTracks().some((t) => t.enabled);
-  const showVideo = camEnabled && (isSelf ? trackEnabled || !!stream : trackEnabled);
+  const name = profile?.display_name ?? participant.name ?? "Mehmon";
+  const initial = name[0]?.toUpperCase() ?? "?";
 
   return (
-    <div className={`relative aspect-video rounded-lg overflow-hidden bg-surface-2 border transition-shadow ${speaking ? "speaking-glow" : ""}`}>
-      {stream && showVideo && (
+    <div className="relative aspect-video rounded-lg overflow-hidden bg-surface-2 border">
+      {camEnabled && videoTrack ? (
         <div
           className="absolute inset-0"
           style={isSelf ? { transform: "rotateY(180deg)" } : undefined}
         >
           <video
-            ref={ref}
+            ref={videoRef}
             autoPlay
             playsInline
             muted={isSelf || locallyMuted}
             className="w-full h-full object-cover"
           />
         </div>
-      )}
-
-      {!showVideo && (
+      ) : (
         <div className="absolute inset-0 grid place-items-center bg-surface-2">
           <div className="text-center">
-            <div className="size-14 rounded-full bg-primary/20 grid place-items-center text-primary font-bold text-lg mx-auto mb-2">
-              {name[0]?.toUpperCase() ?? "?"}
-            </div>
+            <Avatar className="size-14 mx-auto mb-2">
+              {profile?.avatar_url ? <AvatarImage src={profile.avatar_url} alt={name} /> : null}
+              <AvatarFallback className="bg-primary/20 text-primary font-bold">
+                {initial}
+              </AvatarFallback>
+            </Avatar>
             <p className="text-[11px] text-muted-foreground flex items-center gap-1 justify-center">
               <VideoOff className="size-3" />
               {uz.cameraOffLabel}
@@ -102,14 +109,12 @@ function VideoTile({
         </div>
       )}
 
-      {/* Mic indicator */}
       {!micEnabled && (
         <div className="absolute top-1 left-1 size-6 rounded-md bg-destructive/80 grid place-items-center text-white">
           <MicOff className="size-3" />
         </div>
       )}
 
-      {/* Top-right action buttons for remote tiles */}
       {!isSelf && (
         <div className="absolute top-1 right-1 flex items-center gap-1">
           <Tooltip>
@@ -136,6 +141,11 @@ function VideoTile({
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={onToggleControl}>
+                  {isController ? <KeyRound className="size-4 mr-2" /> : <KeySquare className="size-4 mr-2" />}
+                  {isController ? uz.revokeControl : uz.grantControl}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onForceMute}>
                   <ForceMuteIcon className="size-4 mr-2" />
                   {uz.forceMute}
@@ -151,80 +161,102 @@ function VideoTile({
       )}
 
       <div className="absolute bottom-1.5 left-1.5 right-1.5 text-[11px] font-medium text-white drop-shadow flex items-center gap-1">
-        <span className="truncate">{name}{isSelf ? " (siz)" : ""}{isHost ? " 👑" : ""}</span>
+        <span className="truncate">
+          {name}{isSelf ? " (siz)" : ""}{isHost ? " 👑" : ""}{isController && !isHost ? " 🔑" : ""}
+        </span>
       </div>
     </div>
   );
 }
 
 export function CameraGrid({
-  localStream, localSpeaking, peers, profiles, permError,
-  micEnabled, camEnabled, onToggleMic, onToggleCam, onRetry, selfId, selfName,
-  isHost, hostId, onForceMute, onKick,
+  profiles, selfId, hostId, controllers, isHost,
+  onForceMute, onKick, onToggleControl,
 }: CameraGridProps) {
-  const [permDismissed, setPermDismissed] = useState(false);
+  const connectionState = useConnectionState();
+  const participants = useParticipants();
+  const cameraTracks = useTracks([Track.Source.Camera], { onlySubscribed: false });
+  const { localParticipant } = useLocalParticipant();
 
-  if (permError && !permDismissed) {
+  const camOn = localParticipant?.isCameraEnabled ?? false;
+  const micOn = localParticipant?.isMicrophoneEnabled ?? false;
+
+  const toggleMic = () => {
+    if (!localParticipant) return;
+    localParticipant.setMicrophoneEnabled(!micOn).catch((e) => console.warn("[LiveKit] mic toggle", e));
+  };
+  const toggleCam = () => {
+    if (!localParticipant) return;
+    localParticipant.setCameraEnabled(!camOn).catch((e) => console.warn("[LiveKit] cam toggle", e));
+  };
+
+  const cameraTracksByIdentity = new Map<string, TrackReference>();
+  cameraTracks.forEach((t) => {
+    cameraTracksByIdentity.set(t.participant.identity, t);
+  });
+
+  if (connectionState === ConnectionState.Connecting || connectionState === ConnectionState.Reconnecting) {
     return (
-      <div className="rounded-xl border bg-surface p-4 space-y-3">
-        <div className="flex items-start gap-2 text-sm">
-          <AlertCircle className="size-5 text-destructive shrink-0" />
-          <p>{uz.permError}</p>
-        </div>
-        <div className="flex gap-2">
-          <Button size="sm" onClick={onRetry}>{uz.permRetry}</Button>
-          <Button size="sm" variant="ghost" onClick={() => setPermDismissed(true)}>{uz.watchOnly}</Button>
-        </div>
+      <div className="rounded-xl border bg-surface p-6 grid place-items-center text-sm text-muted-foreground">
+        <Loader2 className="size-5 animate-spin text-primary mb-2" />
+        {uz.connectingMedia}
       </div>
     );
   }
 
-  const peerEntries = Object.values(peers);
+  if (connectionState === ConnectionState.Disconnected) {
+    return (
+      <div className="rounded-xl border bg-surface p-4 text-sm text-destructive">
+        {uz.mediaConnectError}
+      </div>
+    );
+  }
+
+  // Order: self first, then others
+  const ordered = [...participants].sort((a, b) => {
+    if (a.identity === selfId) return -1;
+    if (b.identity === selfId) return 1;
+    return 0;
+  });
 
   return (
     <TooltipProvider>
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-2">
-          <VideoTile
-            stream={localStream}
-            name={selfName}
-            speaking={localSpeaking}
-            isSelf
-            isHost={selfId === hostId}
-            camEnabled={camEnabled}
-            micEnabled={micEnabled}
-          />
-          {peerEntries.map((p) => (
+          {ordered.map((p) => (
             <VideoTile
-              key={p.userId}
-              stream={p.stream}
-              name={profiles[p.userId]?.display_name ?? "Mehmon"}
-              speaking={p.speaking}
-              isHost={p.userId === hostId}
-              camEnabled={p.camEnabled}
-              micEnabled={p.micEnabled}
-              showHostMenu={isHost && p.userId !== selfId}
-              onForceMute={() => onForceMute(p.userId)}
-              onKick={() => onKick(p.userId)}
+              key={p.identity}
+              participant={p}
+              videoTrack={cameraTracksByIdentity.get(p.identity)}
+              micEnabled={p.isMicrophoneEnabled}
+              camEnabled={p.isCameraEnabled}
+              isSelf={p.identity === selfId}
+              isHost={p.identity === hostId}
+              isController={controllers.includes(p.identity)}
+              profile={profiles[p.identity]}
+              showHostMenu={isHost && p.identity !== selfId}
+              onForceMute={() => onForceMute(p.identity)}
+              onKick={() => onKick(p.identity)}
+              onToggleControl={() => onToggleControl(p.identity)}
             />
           ))}
         </div>
         <div className="flex gap-2 justify-center">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button size="icon" variant={micEnabled ? "secondary" : "destructive"} onClick={onToggleMic}>
-                {micEnabled ? <Mic className="size-4" /> : <MicOff className="size-4" />}
+              <Button size="icon" variant={micOn ? "secondary" : "destructive"} onClick={toggleMic}>
+                {micOn ? <Mic className="size-4" /> : <MicOff className="size-4" />}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{micEnabled ? uz.micOn : uz.micOff}</TooltipContent>
+            <TooltipContent>{micOn ? uz.micOn : uz.micOff}</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button size="icon" variant={camEnabled ? "secondary" : "destructive"} onClick={onToggleCam}>
-                {camEnabled ? <Video className="size-4" /> : <VideoOff className="size-4" />}
+              <Button size="icon" variant={camOn ? "secondary" : "destructive"} onClick={toggleCam}>
+                {camOn ? <Video className="size-4" /> : <VideoOff className="size-4" />}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{camEnabled ? uz.camOn : uz.camOff}</TooltipContent>
+            <TooltipContent>{camOn ? uz.camOn : uz.camOff}</TooltipContent>
           </Tooltip>
         </div>
       </div>

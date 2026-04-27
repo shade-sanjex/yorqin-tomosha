@@ -151,4 +151,37 @@ export const uz = {
   inviteAccepted: "Qabul qilindi",
   inviteDeclined: "Rad etildi",
   noResults: "Hech kim topilmadi",
+  // Profile
+  profile: "Profil",
+  myProfile: "Mening profilim",
+  nickname: "Foydalanuvchi nomi",
+  avatar: "Profil rasmi",
+  uploadAvatar: "Rasm yuklash",
+  saveProfile: "Saqlash",
+  profileUpdated: "Profil yangilandi",
+  profileError: "Profilni yangilab bo'lmadi",
+  // Lobby
+  activeRooms: "Faol Xonalar",
+  noActiveRooms: "Hozir faol ommaviy xonalar yo'q",
+  publicRoom: "Ommaviy",
+  privateRoom: "Yopiq",
+  privacyToggle: "Yopiq xona",
+  joinRoom: "Qo'shilish",
+  joinRequestSent: "So'rov yuborildi, kuting...",
+  joinRequestIncoming: (name: string) => `${name} xonangizga qo'shilmoqchi`,
+  joinAccepted: "Qabul qilindi",
+  joinDeclined: "Rad etildi",
+  hostNotResponding: "Xona yaratuvchisi javob bermadi",
+  // Permissions
+  grantControl: "Boshqarish huquqini berish",
+  revokeControl: "Boshqarish huquqini olish",
+  controlGranted: (name: string) => `${name}ga boshqarish huquqi berildi`,
+  controlRevoked: (name: string) => `${name}dan boshqarish huquqi olindi`,
+  // YouTube / player
+  youtubeOrFile: "YouTube ssilkasini kiriting yoki video URL...",
+  loadVideo: "Yuklash",
+  invalidVideoUrl: "YouTube havolasi yoki .mp4/.webm URL kerak",
+  // LiveKit
+  connectingMedia: "Aloqa o'rnatilmoqda...",
+  mediaConnectError: "Aloqa o'rnatilmadi",
 } as const;

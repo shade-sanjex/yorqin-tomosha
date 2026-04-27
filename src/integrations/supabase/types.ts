@@ -98,35 +98,47 @@ export type Database = {
       }
       rooms: {
         Row: {
+          controllers: string[]
           created_at: string
           host_id: string
           id: string
+          is_active: boolean
           is_playing: boolean
+          is_private: boolean
           name: string
           playback_time: number
           updated_at: string
+          video_kind: string
           video_storage_path: string | null
           video_url: string | null
         }
         Insert: {
+          controllers?: string[]
           created_at?: string
           host_id: string
           id?: string
+          is_active?: boolean
           is_playing?: boolean
+          is_private?: boolean
           name?: string
           playback_time?: number
           updated_at?: string
+          video_kind?: string
           video_storage_path?: string | null
           video_url?: string | null
         }
         Update: {
+          controllers?: string[]
           created_at?: string
           host_id?: string
           id?: string
+          is_active?: boolean
           is_playing?: boolean
+          is_private?: boolean
           name?: string
           playback_time?: number
           updated_at?: string
+          video_kind?: string
           video_storage_path?: string | null
           video_url?: string | null
         }
