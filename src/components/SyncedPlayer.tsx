@@ -126,10 +126,9 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(fu
         playsInline
         config={{
           youtube: {
-            modestbranding: 1,
+            disablekb: 1,
             rel: 0,
             iv_load_policy: 3,
-            disablekb: 1,
             fs: 0,
           },
         }}
