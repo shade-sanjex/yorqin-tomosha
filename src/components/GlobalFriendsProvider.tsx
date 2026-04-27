@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useFriendsBroadcast } from "@/hooks/useFriendsBroadcast";
+import { JoinRequestListener } from "@/components/JoinRequestListener";
 import { uz } from "@/lib/uz";
 
 type Ctx = ReturnType<typeof useFriendsBroadcast> | null;
@@ -75,5 +76,10 @@ export function GlobalFriendsProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [friends.incomingInvites.length]);
 
-  return <FriendsCtx.Provider value={friends}>{children}</FriendsCtx.Provider>;
+  return (
+    <FriendsCtx.Provider value={friends}>
+      <JoinRequestListener />
+      {children}
+    </FriendsCtx.Provider>
+  );
 }

@@ -5,15 +5,17 @@ import { useSuperAdmin } from "@/hooks/useSuperAdmin";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { uz } from "@/lib/uz";
 import { toast } from "sonner";
-import { Film, Plus, LogOut, Trash2, ExternalLink, Loader2, ShieldAlert } from "lucide-react";
+import { Film, Plus, LogOut, Trash2, ExternalLink, Loader2, ShieldAlert, User, Lock, Globe } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ServerMediaManager } from "@/components/ServerMediaManager";
 import { FriendsModal } from "@/components/FriendsModal";
+import { LobbyList } from "@/components/LobbyList";
 
 export const Route = createFileRoute("/dashboard")({
   component: Dashboard,
@@ -24,6 +26,7 @@ interface Room {
   name: string;
   created_at: string;
   host_id: string;
+  is_private: boolean;
 }
 
 function Dashboard() {
@@ -33,6 +36,7 @@ function Dashboard() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  const [isPrivate, setIsPrivate] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -43,7 +47,7 @@ function Dashboard() {
     if (!user) return;
     supabase
       .from("rooms")
-      .select("id, name, created_at, host_id")
+      .select("id, name, created_at, host_id, is_private")
       .eq("host_id", user.id)
       .order("created_at", { ascending: false })
       .then(({ data }) => setRooms(data ?? []));
@@ -55,8 +59,8 @@ function Dashboard() {
     setCreating(true);
     const { data, error } = await supabase
       .from("rooms")
-      .insert({ host_id: user.id, name })
-      .select("id, name, created_at, host_id")
+      .insert({ host_id: user.id, name, is_private: isPrivate })
+      .select("id, name, created_at, host_id, is_private")
       .single();
     setCreating(false);
     if (error || !data) {
@@ -109,6 +113,12 @@ function Dashboard() {
             )}
             {isSuperAdmin && <ServerMediaManager />}
             <FriendsModal />
+            <Link to="/profile">
+              <Button variant="outline" size="sm">
+                <User className="size-4 mr-1.5" />
+                {uz.profile}
+              </Button>
+            </Link>
             <Button variant="ghost" size="sm" onClick={signOut}>
               <LogOut className="size-4 mr-1.5" /> {uz.signOut}
             </Button>
@@ -119,17 +129,24 @@ function Dashboard() {
       <section className="max-w-5xl mx-auto px-6 py-10">
         <h1 className="text-3xl font-bold mb-6">{uz.myRooms}</h1>
 
-        <div className="rounded-xl border bg-surface p-4 mb-8 flex flex-col sm:flex-row gap-3">
-          <Input
-            placeholder={uz.roomName}
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            maxLength={60}
-            onKeyDown={(e) => e.key === "Enter" && createRoom()}
-          />
-          <Button onClick={createRoom} disabled={creating} className="shrink-0">
-            {creating ? <Loader2 className="size-4 animate-spin" /> : <><Plus className="size-4 mr-1.5" />{uz.createRoom}</>}
-          </Button>
+        <div className="rounded-xl border bg-surface p-4 mb-8 flex flex-col gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Input
+              placeholder={uz.roomName}
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              maxLength={60}
+              onKeyDown={(e) => e.key === "Enter" && createRoom()}
+            />
+            <Button onClick={createRoom} disabled={creating} className="shrink-0">
+              {creating ? <Loader2 className="size-4 animate-spin" /> : <><Plus className="size-4 mr-1.5" />{uz.createRoom}</>}
+            </Button>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Switch checked={isPrivate} onCheckedChange={setIsPrivate} />
+            {isPrivate ? <Lock className="size-3.5" /> : <Globe className="size-3.5" />}
+            {isPrivate ? uz.privateRoom : uz.publicRoom}
+          </label>
         </div>
 
         {rooms.length === 0 ? (
@@ -140,10 +157,13 @@ function Dashboard() {
           <ul className="grid gap-3">
             {rooms.map((r) => (
               <li key={r.id} className="rounded-xl border bg-surface p-4 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-semibold truncate">{r.name}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {new Date(r.created_at).toLocaleString("uz-UZ")}
+                <div className="min-w-0 flex items-center gap-2">
+                  {r.is_private ? <Lock className="size-3.5 text-muted-foreground" /> : <Globe className="size-3.5 text-success" />}
+                  <div>
+                    <div className="font-semibold truncate">{r.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {new Date(r.created_at).toLocaleString("uz-UZ")}
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-2 shrink-0">
@@ -160,6 +180,9 @@ function Dashboard() {
             ))}
           </ul>
         )}
+
+        <h2 className="text-2xl font-bold mt-12 mb-4">{uz.activeRooms}</h2>
+        <LobbyList />
       </section>
 
       <AlertDialog open={!!deletingId} onOpenChange={(o) => !o && setDeletingId(null)}>
