@@ -480,29 +480,44 @@ function RoomPage() {
 
       <div className="flex-1 flex flex-col md:flex-row min-h-0 relative">
         <div className="flex-1 flex flex-col min-w-0 p-2 md:p-3 gap-2 md:gap-3">
-          {canControl && (
-            <div className="flex gap-2 items-center">
-              <Youtube className="size-4 text-destructive shrink-0" />
-              <Input
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                placeholder={uz.youtubeOrFile}
-                onKeyDown={(e) => e.key === "Enter" && submitVideoUrl()}
+          {/* Universal video toolbar — anyone can load a video / file / stream */}
+          <div className="flex gap-2 items-center flex-wrap">
+            <Youtube className="size-4 text-destructive shrink-0" />
+            <Input
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              placeholder={uz.youtubeOrFile}
+              onKeyDown={(e) => e.key === "Enter" && submitVideoUrl()}
+              className="min-w-0 flex-1"
+            />
+            <Button size="sm" onClick={submitVideoUrl}>{uz.loadVideo}</Button>
+
+            <label className="inline-flex">
+              <input
+                type="file"
+                accept="video/mp4,video/webm"
+                className="hidden"
+                onChange={handleLocalFile}
               />
-              <Button size="sm" onClick={submitVideoUrl}>{uz.loadVideo}</Button>
-              {room.video_url && (
-                <Button size="sm" variant="destructive" onClick={() => setNukeOpen(true)}>
-                  <Trash2 className="size-4" />
-                </Button>
-              )}
-            </div>
-          )}
+              <span className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border bg-surface hover:bg-surface-2 text-sm cursor-pointer">
+                <Film className="size-3.5" />
+                <span className="hidden sm:inline">{uz.uploadLocalFile}</span>
+              </span>
+            </label>
+
+            <MediaSearchDialog onPick={handlePickStream} />
+
+            {isHost && room.video_url && (
+              <Button size="sm" variant="destructive" onClick={() => setNukeOpen(true)}>
+                <Trash2 className="size-4" />
+              </Button>
+            )}
+          </div>
 
           <div className="relative flex-1 rounded-xl overflow-hidden bg-black border min-h-0">
             <SyncedPlayer
               ref={playerHandleRef}
               state={synced.playerState}
-              canControl={canControl}
               bufferingName={bufferingName}
               {...onPlayerEvent}
             />
