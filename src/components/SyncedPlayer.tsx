@@ -9,7 +9,6 @@ import { uz } from "@/lib/uz";
 
 interface SyncedPlayerProps {
   state: PlayerState;
-  canControl: boolean;
   onPlay: () => void;
   onPause: () => void;
   onSeek: (sec: number) => void;
