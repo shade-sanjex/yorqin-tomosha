@@ -77,10 +77,9 @@ export function useSyncedPlayer({
     [userId, onBufferingMapChange]
   );
 
-  /** Anyone with control can broadcast playback state to all clients. */
+  /** Anyone in the room can broadcast playback state to all clients. */
   const broadcastState = useCallback(
     async (next: Partial<PlayerState>) => {
-      if (!canControl) return;
       const cur = playerStateRef.current;
       const handle = playerHandleRef.current;
       const state: PlayerState = {
@@ -110,7 +109,7 @@ export function useSyncedPlayer({
           .eq("id", roomId);
       }
     },
-    [canControl, isHost, roomId, playerHandleRef]
+    [isHost, roomId, playerHandleRef]
   );
 
   useEffect(() => {
