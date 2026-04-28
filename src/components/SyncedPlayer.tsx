@@ -85,7 +85,6 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(fu
   }, [onPlay, onPause, onSeek, onProgress, onBuffering, state.videoUrl]);
 
   const togglePlay = () => {
-    if (!canControl) return;
     const p = playerRef.current;
     if (!p) return;
     if (p.paused) p.play().catch(() => {});
