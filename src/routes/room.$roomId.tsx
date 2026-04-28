@@ -610,6 +610,7 @@ function RoomPage() {
           data-lk-theme="default"
         >
           <RoomAudioRenderer />
+          <ForceMuteHandler roomId={roomId} selfId={user.id} />
           {RoomBody}
         </LiveKitRoom>
       ) : (
