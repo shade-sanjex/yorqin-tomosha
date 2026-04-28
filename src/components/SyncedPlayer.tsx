@@ -142,23 +142,16 @@ export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(fu
             value={[localTime]}
             max={duration || 1}
             step={0.1}
-            onValueChange={(v) => canControl && onSeek(v[0])}
-            disabled={!canControl}
+            onValueChange={(v) => onSeek(v[0])}
             className="flex-1"
           />
           <span>{fmtTime(duration)}</span>
         </div>
 
         <div className="flex items-center gap-2">
-          {canControl ? (
-            <Button size="icon" variant="secondary" onClick={togglePlay} className="size-8">
-              {state.isPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
-            </Button>
-          ) : (
-            <span className="text-[11px] text-white/80 px-2 py-1 rounded bg-black/40">
-              {uz.hostOnly}
-            </span>
-          )}
+          <Button size="icon" variant="secondary" onClick={togglePlay} className="size-8">
+            {state.isPlaying ? <Pause className="size-4" /> : <Play className="size-4" />}
+          </Button>
 
           <div className="flex items-center gap-2 ml-auto">
             <button
