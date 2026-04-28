@@ -184,4 +184,20 @@ export const uz = {
   // LiveKit
   connectingMedia: "Aloqa o'rnatilmoqda...",
   mediaConnectError: "Aloqa o'rnatilmadi",
+  // Local file
+  uploadLocalFile: "Fayl yuklash",
+  localFileLoaded: "Mahalliy fayl yuklandi (faqat sizda ko'rinadi, vaqt sinxron)",
+  // Force mute
+  muteParticipant: "Ovozini o'chirish",
+  forcedMutedToast: "Sizning mikrofoningiz xona egasi tomonidan o'chirildi",
+  // Media search
+  searchMedia: "Kino/Anime Qidirish",
+  searchPlaceholder: "Kino yoki anime nomi...",
+  searchAnime: "Anime",
+  searchMovies: "Kino",
+  searchUnavailable: "Qidiruv xizmati hozir ishlamayapti",
+  streamUnavailable: "Oqim havolasi topilmadi",
+  noSearchResults: "Hech nima topilmadi",
+  searching: "Qidirilmoqda...",
+  loadStream: "Yuklash",
 } as const;
