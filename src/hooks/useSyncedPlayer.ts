@@ -25,8 +25,6 @@ export interface SyncedPlayerHandle {
 interface UseSyncedPlayerArgs {
   roomId: string;
   userId: string;
-  /** any user that may control playback (host or in controllers list) */
-  canControl: boolean;
   /** Only the host writes the canonical state into the rooms table */
   isHost: boolean;
   initialState: PlayerState;
@@ -45,7 +43,6 @@ const HOST_BROADCAST_INTERVAL = 1500;
 export function useSyncedPlayer({
   roomId,
   userId,
-  canControl,
   isHost,
   initialState,
   onBufferingMapChange,
@@ -77,10 +74,9 @@ export function useSyncedPlayer({
     [userId, onBufferingMapChange]
   );
 
-  /** Anyone with control can broadcast playback state to all clients. */
+  /** Anyone in the room can broadcast playback state to all clients. */
   const broadcastState = useCallback(
     async (next: Partial<PlayerState>) => {
-      if (!canControl) return;
       const cur = playerStateRef.current;
       const handle = playerHandleRef.current;
       const state: PlayerState = {
@@ -110,7 +106,7 @@ export function useSyncedPlayer({
           .eq("id", roomId);
       }
     },
-    [canControl, isHost, roomId, playerHandleRef]
+    [isHost, roomId, playerHandleRef]
   );
 
   useEffect(() => {
@@ -146,7 +142,8 @@ export function useSyncedPlayer({
       statusMapRef.current = { ...statusMapRef.current, [uid]: status };
       onBufferingMapChange({ ...statusMapRef.current });
 
-      if (canControl) {
+      // Anyone (host preferred but acceptable for everyone since playback is open) auto-pauses if a peer is buffering.
+      if (isHost) {
         const anyBuffering = Object.values(statusMapRef.current).some((s) => s === "yuklanmoqda");
         const handle = playerHandleRef.current;
         if (anyBuffering && handle && playerStateRef.current.isPlaying) {
@@ -166,11 +163,11 @@ export function useSyncedPlayer({
       supabase.removeChannel(ch);
       channelRef.current = null;
     };
-  }, [roomId, userId, canControl, onBufferingMapChange, broadcastState, playerHandleRef]);
+  }, [roomId, userId, isHost, onBufferingMapChange, broadcastState, playerHandleRef]);
 
-  // Periodic time broadcast from any controller while playing
+  // Periodic time broadcast from host while playing (keeps everyone in sync)
   useEffect(() => {
-    if (!canControl) return;
+    if (!isHost) return;
     const id = window.setInterval(() => {
       const handle = playerHandleRef.current;
       if (!handle) return;
@@ -184,7 +181,7 @@ export function useSyncedPlayer({
       }
     }, HOST_BROADCAST_INTERVAL);
     return () => window.clearInterval(id);
-  }, [canControl, playerHandleRef]);
+  }, [isHost, playerHandleRef]);
 
   return { playerState, setPlayerState, broadcastState, setMyStatus, isApplyingRemoteRef };
 }

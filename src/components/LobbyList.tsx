@@ -87,12 +87,15 @@ export function LobbyList() {
 
     ch.subscribe((status) => {
       if (status === "SUBSCRIBED") {
-        ch.send({
-          type: "broadcast",
-          event: "join-request",
-          payload: { fromId: user.id, fromName },
-        });
-        toast.info(uz.joinRequestSent);
+        // Small delay so the host's lobby channel has time to be ready
+        window.setTimeout(() => {
+          ch.send({
+            type: "broadcast",
+            event: "join-request",
+            payload: { fromId: user.id, fromName },
+          });
+          toast.info(uz.joinRequestSent);
+        }, 400);
       }
     });
   };

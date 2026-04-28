@@ -24,6 +24,8 @@ import { CameraGrid } from "@/components/CameraGrid";
 import { ChatPanel } from "@/components/ChatPanel";
 import { InviteFriendsDialog } from "@/components/InviteFriendsDialog";
 import { SyncedPlayer } from "@/components/SyncedPlayer";
+import { ForceMuteHandler } from "@/components/ForceMuteHandler";
+import { MediaSearchDialog } from "@/components/MediaSearchDialog";
 
 export const Route = createFileRoute("/room/$roomId")({
   component: RoomPage,
@@ -213,6 +215,47 @@ function RoomPage() {
     return () => { supabase.removeChannel(ch); moderationChannelRef.current = null; };
   }, [roomId, user, navigate]);
 
+  // Host-side lobby listener (redundancy on top of GlobalFriendsProvider's JoinRequestListener)
+  useEffect(() => {
+    if (!user || !room || user.id !== room.host_id) return;
+    const ch = supabase.channel(`room:${roomId}:lobby`, {
+      config: { broadcast: { self: false } },
+    });
+    ch.on("broadcast", { event: "join-request" }, ({ payload }) => {
+      const p = payload as { fromId: string; fromName: string };
+      const id = `lobby-${roomId}-${p.fromId}`;
+      toast(uz.joinRequestIncoming(p.fromName), {
+        id,
+        duration: Infinity,
+        description: room.name,
+        action: {
+          label: uz.accept,
+          onClick: () => {
+            ch.send({
+              type: "broadcast",
+              event: "join-response",
+              payload: { toId: p.fromId, accepted: true },
+            });
+            toast.dismiss(id);
+          },
+        },
+        cancel: {
+          label: uz.decline,
+          onClick: () => {
+            ch.send({
+              type: "broadcast",
+              event: "join-response",
+              payload: { toId: p.fromId, accepted: false },
+            });
+            toast.dismiss(id);
+          },
+        },
+      });
+    });
+    ch.subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user, room, roomId]);
+
   const addFloating = useCallback((emoji: string) => {
     const id = Date.now() + Math.random();
     const left = 20 + Math.random() * 60;
@@ -259,7 +302,6 @@ function RoomPage() {
   const synced = useSyncedPlayer({
     roomId,
     userId: user?.id ?? "",
-    canControl,
     isHost,
     initialState: initialPlayerState,
     onBufferingMapChange: handleBufferingMap,
@@ -295,7 +337,7 @@ function RoomPage() {
   }, [statusMap]);
 
   const submitVideoUrl = async () => {
-    if (!isHost || !room) return;
+    if (!room) return;
     const trimmed = urlInput.trim();
     let kind: "file" | "youtube" | null = null;
     if (YT_RE.test(trimmed)) kind = "youtube";
@@ -304,19 +346,13 @@ function RoomPage() {
       toast.error(uz.invalidVideoUrl);
       return;
     }
-    if (room.video_storage_path) {
-      await supabase.storage.from("watch_party_media").remove([room.video_storage_path]);
-    }
-    await supabase
-      .from("rooms")
-      .update({
-        video_url: trimmed,
-        video_kind: kind,
-        video_storage_path: null,
-        playback_time: 0,
-        is_playing: false,
-      })
-      .eq("id", roomId);
+    // Broadcast immediately so all participants switch sources right away.
+    synced.broadcastState({
+      videoUrl: trimmed,
+      videoKind: kind,
+      playbackTime: 0,
+      isPlaying: false,
+    });
     setUrlInput("");
     toast.success("Video qo'shildi");
   };
@@ -402,12 +438,27 @@ function RoomPage() {
       ? profiles[bufferingUserId]?.display_name ?? "Foydalanuvchi"
       : null;
 
+  // Universal playback: anyone in the room can play / pause / seek.
   const onPlayerEvent = {
-    onPlay: () => { if (canControl && !synced.isApplyingRemoteRef.current) synced.broadcastState({ isPlaying: true }); },
-    onPause: () => { if (canControl && !synced.isApplyingRemoteRef.current) synced.broadcastState({ isPlaying: false }); },
-    onSeek: (sec: number) => { if (canControl && !synced.isApplyingRemoteRef.current) synced.broadcastState({ playbackTime: sec }); },
+    onPlay: () => { if (!synced.isApplyingRemoteRef.current) synced.broadcastState({ isPlaying: true }); },
+    onPause: () => { if (!synced.isApplyingRemoteRef.current) synced.broadcastState({ isPlaying: false }); },
+    onSeek: (sec: number) => { if (!synced.isApplyingRemoteRef.current) synced.broadcastState({ playbackTime: sec }); },
     onProgress: (_sec: number) => { /* periodic broadcast handled inside hook */ },
     onBuffering: (b: boolean) => synced.setMyStatus(b ? "yuklanmoqda" : "tayyor"),
+  };
+
+  const handleLocalFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    synced.broadcastState({ videoUrl: url, videoKind: "file", playbackTime: 0, isPlaying: false });
+    toast.success(uz.localFileLoaded);
+    e.target.value = "";
+  };
+
+  const handlePickStream = (url: string, title: string) => {
+    synced.broadcastState({ videoUrl: url, videoKind: "file", playbackTime: 0, isPlaying: false });
+    toast.success(title);
   };
 
   const RoomBody = (
@@ -464,29 +515,44 @@ function RoomPage() {
 
       <div className="flex-1 flex flex-col md:flex-row min-h-0 relative">
         <div className="flex-1 flex flex-col min-w-0 p-2 md:p-3 gap-2 md:gap-3">
-          {canControl && (
-            <div className="flex gap-2 items-center">
-              <Youtube className="size-4 text-destructive shrink-0" />
-              <Input
-                value={urlInput}
-                onChange={(e) => setUrlInput(e.target.value)}
-                placeholder={uz.youtubeOrFile}
-                onKeyDown={(e) => e.key === "Enter" && submitVideoUrl()}
+          {/* Universal video toolbar — anyone can load a video / file / stream */}
+          <div className="flex gap-2 items-center flex-wrap">
+            <Youtube className="size-4 text-destructive shrink-0" />
+            <Input
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              placeholder={uz.youtubeOrFile}
+              onKeyDown={(e) => e.key === "Enter" && submitVideoUrl()}
+              className="min-w-0 flex-1"
+            />
+            <Button size="sm" onClick={submitVideoUrl}>{uz.loadVideo}</Button>
+
+            <label className="inline-flex">
+              <input
+                type="file"
+                accept="video/mp4,video/webm"
+                className="hidden"
+                onChange={handleLocalFile}
               />
-              <Button size="sm" onClick={submitVideoUrl}>{uz.loadVideo}</Button>
-              {room.video_url && (
-                <Button size="sm" variant="destructive" onClick={() => setNukeOpen(true)}>
-                  <Trash2 className="size-4" />
-                </Button>
-              )}
-            </div>
-          )}
+              <span className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border bg-surface hover:bg-surface-2 text-sm cursor-pointer">
+                <Film className="size-3.5" />
+                <span className="hidden sm:inline">{uz.uploadLocalFile}</span>
+              </span>
+            </label>
+
+            <MediaSearchDialog onPick={handlePickStream} />
+
+            {isHost && room.video_url && (
+              <Button size="sm" variant="destructive" onClick={() => setNukeOpen(true)}>
+                <Trash2 className="size-4" />
+              </Button>
+            )}
+          </div>
 
           <div className="relative flex-1 rounded-xl overflow-hidden bg-black border min-h-0">
             <SyncedPlayer
               ref={playerHandleRef}
               state={synced.playerState}
-              canControl={canControl}
               bufferingName={bufferingName}
               {...onPlayerEvent}
             />
@@ -585,6 +651,7 @@ function RoomPage() {
           data-lk-theme="default"
         >
           <RoomAudioRenderer />
+          <ForceMuteHandler roomId={roomId} selfId={user.id} />
           {RoomBody}
         </LiveKitRoom>
       ) : (
