@@ -24,6 +24,8 @@ import { CameraGrid } from "@/components/CameraGrid";
 import { ChatPanel } from "@/components/ChatPanel";
 import { InviteFriendsDialog } from "@/components/InviteFriendsDialog";
 import { SyncedPlayer } from "@/components/SyncedPlayer";
+import { ForceMuteHandler } from "@/components/ForceMuteHandler";
+import { MediaSearchDialog } from "@/components/MediaSearchDialog";
 
 export const Route = createFileRoute("/room/$roomId")({
   component: RoomPage,
