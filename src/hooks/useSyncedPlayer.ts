@@ -145,7 +145,8 @@ export function useSyncedPlayer({
       statusMapRef.current = { ...statusMapRef.current, [uid]: status };
       onBufferingMapChange({ ...statusMapRef.current });
 
-      if (canControl) {
+      // Anyone (host preferred but acceptable for everyone since playback is open) auto-pauses if a peer is buffering.
+      if (isHost) {
         const anyBuffering = Object.values(statusMapRef.current).some((s) => s === "yuklanmoqda");
         const handle = playerHandleRef.current;
         if (anyBuffering && handle && playerStateRef.current.isPlaying) {
@@ -165,11 +166,11 @@ export function useSyncedPlayer({
       supabase.removeChannel(ch);
       channelRef.current = null;
     };
-  }, [roomId, userId, canControl, onBufferingMapChange, broadcastState, playerHandleRef]);
+  }, [roomId, userId, isHost, onBufferingMapChange, broadcastState, playerHandleRef]);
 
-  // Periodic time broadcast from any controller while playing
+  // Periodic time broadcast from host while playing (keeps everyone in sync)
   useEffect(() => {
-    if (!canControl) return;
+    if (!isHost) return;
     const id = window.setInterval(() => {
       const handle = playerHandleRef.current;
       if (!handle) return;
