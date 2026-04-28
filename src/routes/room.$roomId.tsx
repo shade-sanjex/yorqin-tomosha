@@ -215,6 +215,47 @@ function RoomPage() {
     return () => { supabase.removeChannel(ch); moderationChannelRef.current = null; };
   }, [roomId, user, navigate]);
 
+  // Host-side lobby listener (redundancy on top of GlobalFriendsProvider's JoinRequestListener)
+  useEffect(() => {
+    if (!user || !room || user.id !== room.host_id) return;
+    const ch = supabase.channel(`room:${roomId}:lobby`, {
+      config: { broadcast: { self: false } },
+    });
+    ch.on("broadcast", { event: "join-request" }, ({ payload }) => {
+      const p = payload as { fromId: string; fromName: string };
+      const id = `lobby-${roomId}-${p.fromId}`;
+      toast(uz.joinRequestIncoming(p.fromName), {
+        id,
+        duration: Infinity,
+        description: room.name,
+        action: {
+          label: uz.accept,
+          onClick: () => {
+            ch.send({
+              type: "broadcast",
+              event: "join-response",
+              payload: { toId: p.fromId, accepted: true },
+            });
+            toast.dismiss(id);
+          },
+        },
+        cancel: {
+          label: uz.decline,
+          onClick: () => {
+            ch.send({
+              type: "broadcast",
+              event: "join-response",
+              payload: { toId: p.fromId, accepted: false },
+            });
+            toast.dismiss(id);
+          },
+        },
+      });
+    });
+    ch.subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user, room, roomId]);
+
   const addFloating = useCallback((emoji: string) => {
     const id = Date.now() + Math.random();
     const left = 20 + Math.random() * 60;
