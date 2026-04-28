@@ -1,92 +1,61 @@
-# Fixes & New Features for Watch Party
+## Maqsad
+Consumet API o'rnini TMDB qidiruvi + VidSrc iframe ijro etish bilan almashtirish. Iframe ishlatilganda play/pause sinxronizatsiyasini butunlay o'chirib qo'yish — foydalanuvchilar mustaqil tomosha qiladi, lekin LiveKit chat/audio/video davom etadi.
 
-All UI strings stay in **Uzbek (Latin)**. LiveKit connection logic and `.env` are not touched.
+## 1-qadam — TMDB API kalitini qo'shish
+TMDB kaliti hozircha sozlanmagan. Men sizdan **`TMDB_API_KEY`** secret'ini qo'shishni so'rayman (Lovable Cloud secret sifatida). Kalitni https://www.themoviedb.org/settings/api dan oling (v3 auth, "API Key" qatori).
 
-## Task 1 — Camera mirroring (local-only)
+Kalit edge function orqali ishlatiladi — frontendga oqib chiqmaydi.
 
-`src/components/CameraGrid.tsx` (`VideoTile`)
-- The `style={isSelf ? { transform: "rotateY(180deg)" } : undefined}` wrapper is correct in spirit but kept on the outer div. Verify and explicitly only mirror the local self-view; remove any inherited transforms on the `<video>` element. Remote tiles render unmirrored.
+## 2-qadam — Yangi edge function: `tmdb-search`
+`supabase/functions/tmdb-search/index.ts` yaratiladi:
+- `GET ?q=...` → `https://api.themoviedb.org/3/search/multi?api_key=...&query=...&include_adult=false`
+- Faqat `movie` va `tv` natijalarini qaytaradi (poster, sarlavha, yil, tmdb_id, media_type).
+- `verify_jwt = false` (umumiy qidiruv).
+- Kalit yo'q bo'lsa 503 + tushunarli xato.
 
-## Task 2 — Restore local file upload
+## 3-qadam — `MediaSearchDialog.tsx` ni qayta yozish
+- Consumet kodini olib tashlash.
+- Yagona qidiruv maydoni (Anime/Movies tablari shart emas — TMDB multi-search).
+- Natijalar grid: poster (`https://image.tmdb.org/t/p/w300{poster_path}`), sarlavha, yil, "Film" yoki "Serial" rozetkasi.
+- Tanlanganda iframe URL quriladi:
+  - movie: `https://vidsrc.to/embed/movie/{tmdb_id}`
+  - tv: `https://vidsrc.to/embed/tv/{tmdb_id}/1/1`
+- `onPick(url, title, "iframe")` chaqiriladi.
 
-`src/routes/room.$roomId.tsx` URL toolbar
-- Add a "Fayl yuklash" button next to the URL input, wrapping a hidden `<input type="file" accept="video/mp4,video/webm" />`.
-- On change: `URL.createObjectURL(file)`, then call `synced.broadcastState({ videoUrl: localUrl, videoKind: "file", playbackTime: 0, isPlaying: false })` so the host's DB row updates and remote peers also receive the broadcast (they will see "Fayl mavjud emas" if they cannot reach the blob URL — acceptable per spec, since each user can play their own local copy and only timestamps sync). Add Uzbek string `uz.uploadLocalFile = "Fayl yuklash"` and `uz.localFileHint`.
-- Revoke the object URL on unmount / when replaced.
+## 4-qadam — `PlayerState` ga `iframe` qo'shish
+`src/hooks/useSyncedPlayer.ts`:
+```ts
+videoKind: "file" | "youtube" | "iframe"
+```
+DB ham allaqachon `text` (`video_kind`) — migratsiya shart emas. `RoomRow` tipi `room.$roomId.tsx` da yangilanadi.
 
-## Task 3 — Universal playback control
+Iframe holatida `useSyncedPlayer` da:
+- davriy host vaqt broadcast'i — `videoKind === "iframe"` bo'lsa o'tkazib yuboriladi.
+- remote "player" event qabul qilinganda ham seek/play/pause iframe uchun o'tkazib yuboriladi.
+- Lekin `videoUrl` o'zgarishi (yangi kontent tanlash) baribir broadcast qilinadi va hammada yangilanadi.
 
-Remove host/controller restriction from playback UI.
+## 5-qadam — `SyncedPlayer.tsx` da iframe rendering
+`videoKind === "iframe"` bo'lsa:
+- `<ReactPlayer>` o'rniga `<iframe src={videoUrl} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen className="absolute inset-0 w-full h-full border-0" />`.
+- Custom play/pause/seek/volume overlay'i butunlay yashiriladi.
+- Buffering overlay'i ham ko'rsatilmaydi (sinxronizatsiya yo'q).
+- Kichik yuqori burchakda info badge: "Mustaqil tomosha — chat sinxron".
 
-`src/components/SyncedPlayer.tsx`
-- Drop all `canControl` gating: Play/Pause button always enabled, Slider always enabled, no "Faqat xona yaratuvchisi" pill.
-- Always call `onPlay/onPause/onSeek` from any user.
+## 6-qadam — Xona toolbar'iga "Iframe ssilka" maydoni
+`src/routes/room.$roomId.tsx` da YouTube URL inputi yonida:
+- Yangi input: `placeholder="Iframe (Embed) ssilka kiriting"` + "Qo'shish" tugmasi.
+- Submit qilinganda: `broadcastState({ videoUrl: pasted, videoKind: "iframe", isPlaying: false, playbackTime: 0 })`.
+- Mavjud YouTube/file flow'lariga tegmasdan qoldiriladi.
+- `MediaSearchDialog` ham bir xil `broadcastState` chaqiruvini ishlatadi.
 
-`src/hooks/useSyncedPlayer.ts`
-- `broadcastState`: remove the `if (!canControl) return;` guard so any participant can broadcast over `room:{id}:player`.
-- Keep DB persistence guarded by `isHost` only (RLS still requires it). Non-hosts' actions propagate via Realtime broadcast immediately; the host echoes to DB on its next state update or via a small handler that mirrors the latest broadcast to DB.
+## 7-qadam — O'zbek matnlarini qo'shish (`src/lib/uz.ts`)
+- `searchTmdbHint`, `tmdbUnavailable`, `iframeUrl`, `iframeUrlPlaceholder`, `iframeAdded`, `independentWatch`, `mediaTypeMovie`, `mediaTypeTv`, `releaseYear`.
 
-`src/routes/room.$roomId.tsx`
-- `onPlayerEvent`: drop the `canControl` check so every user broadcasts their input.
-- Pass `canControl={true}` to `SyncedPlayer` (or remove the prop entirely).
+## Texnik xulosa
+- DB sxemasi o'zgarmaydi (`video_kind` allaqachon `text`).
+- Hech qanday LiveKit konfiguratsiyasi o'zgartirilmaydi.
+- YouTube va fayl ijrosi avvalgidek sinxron qoladi.
+- Iframe rejimida custom kontroller ham, vaqt broadcast'i ham yo'q — faqat ulashilgan URL.
 
-## Task 4 — Fix Join Request notifications
-
-Issue: `JoinRequestListener` only subscribes to lobby channels for rooms the user already hosts in DB at mount time. If the user opens the app then creates a room, or the host is currently inside the room route, the lobby channel may not be subscribed in time and broadcast `self: false` filters out anything sent before subscribe.
-
-Fixes:
-- `src/components/JoinRequestListener.tsx`
-  - Re-subscribe whenever the user's `rooms` list changes: add a `postgres_changes` listener on `rooms` filtered by `host_id=eq.{user.id}` to re-run the loader.
-  - Use `toast()` with explicit `action`/`cancel` (already done) but increase visibility: `important: true`-style — add `style: { background: 'hsl(var(--primary))' }` and `duration: Infinity` until acted on.
-- Also mount a per-room lobby subscription **inside** `room.$roomId.tsx` for the host as a redundancy: when `isHost`, subscribe to `room:{roomId}:lobby` directly and respond to `join-request` with the same accept/decline toast.
-- `LobbyList.requestJoin`: subscribe first, then send the broadcast only after `SUBSCRIBED` (already done) — add a 500ms delay before sending to give host's channel time to be active, or switch to `presence` so host always sees the request.
-
-## Task 5 — Force Mute moderation (actually mutes target)
-
-`src/routes/room.$roomId.tsx`
-- Already broadcasts `force-mute` on `moderationChannelRef`. Add a listener on the same channel:
-  ```ts
-  ch.on("broadcast", { event: "force-mute" }, ({ payload }) => {
-    if (payload.targetUserId !== user.id) return;
-    // Get LiveKit local participant via a ref / context and disable mic
-    lkRoomRef.current?.localParticipant.setMicrophoneEnabled(false);
-    toast.warning(uz.mutedByHost);
-  });
-  ```
-- Expose the LiveKit Room instance through a small wrapper (`useRoomContext` from `@livekit/components-react`) inside `RoomBody` so the moderation effect can call `localParticipant.setMicrophoneEnabled(false)`.
-- Implementation: create a tiny `<ForceMuteHandler userId selfId />` component rendered inside `<LiveKitRoom>` that uses `useLocalParticipant()` and subscribes to the moderation broadcast — keeps logic close to LiveKit context.
-
-`src/components/CameraGrid.tsx`
-- Dropdown already has `uz.forceMute` ("Hammaga ovozini o'chirish"). Rename string to "Ovozini o'chirish" per spec, keep behavior.
-
-## Task 6 — Movie / Anime search (Consumet)
-
-New file `src/components/MediaSearchDialog.tsx`:
-- Trigger button "Kino/Anime Qidirish" placed next to the URL input (visible to all participants since playback is universal).
-- Dialog with:
-  - Search input (Uzbek placeholder "Kino yoki anime nomi...").
-  - Tabs: "Anime" (Consumet anilist) | "Kino" (Consumet flixhq/movies).
-  - On submit, fetch e.g. `https://api.consumet.org/meta/anilist/{query}` or `/movies/flixhq/{query}`. If request fails or non-200, show toast `uz.searchUnavailable` ("Qidiruv xizmati hozir ishlamayapti").
-  - Render result grid (poster + title). On click, fetch streaming link: `/{provider}/watch/{episodeId}` (anime) or `/movies/flixhq/watch?...`. Pick the first `.m3u8` source.
-  - Call a callback `onPick(url)` → in room route, broadcast `videoUrl=url, videoKind="file", playbackTime=0, isPlaying=false` (m3u8 plays through ReactPlayer's HLS support — already importable via hls.js if present; otherwise add `hls.js` dep).
-- If no .m3u8 returned: toast error.
-
-Add Uzbek strings: `searchMedia`, `searchPlaceholder`, `searchAnime`, `searchMovies`, `searchUnavailable`, `streamUnavailable`, `noSearchResults`.
-
-Update `FILE_RE` to include `.m3u8` (already does) — keep.
-
-Optional dep: `bun add hls.js` if `react-player` does not bundle HLS for the YouTube-only build. Verify by checking `react-player` version. (Not touching `.env`.)
-
-## Files touched
-- src/components/CameraGrid.tsx (mirror confirm, label tweak)
-- src/components/SyncedPlayer.tsx (remove canControl gating)
-- src/hooks/useSyncedPlayer.ts (remove canControl guard on broadcast)
-- src/routes/room.$roomId.tsx (file upload, search button, force-mute handler component, host lobby fallback, universal playback events)
-- src/components/JoinRequestListener.tsx (subscribe on rooms changes, persistent toast)
-- src/components/LobbyList.tsx (slight delay / safer subscribe)
-- src/components/MediaSearchDialog.tsx (NEW)
-- src/lib/uz.ts (new strings)
-- package.json (maybe `hls.js`)
-
-## Out of scope
-- `.env`, LiveKit token edge function, DB schema, auth flow.
+## Sizdan kerak
+**`TMDB_API_KEY`** secret'ini qo'shing. Reja tasdiqlangach, men buni so'rayman va keyin barcha kodni yozaman.
