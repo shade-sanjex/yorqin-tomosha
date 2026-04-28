@@ -18,7 +18,7 @@ export function ForceMuteHandler({ roomId, selfId }: Props) {
   const { localParticipant } = useLocalParticipant();
 
   useEffect(() => {
-    const ch = supabase.channel(`room:${roomId}:moderation:fm`, {
+    const ch = supabase.channel(`room:${roomId}:moderation`, {
       config: { broadcast: { self: false } },
     });
     ch.on("broadcast", { event: "force-mute" }, ({ payload }) => {
