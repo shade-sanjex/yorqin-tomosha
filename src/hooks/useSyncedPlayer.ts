@@ -184,7 +184,7 @@ export function useSyncedPlayer({
       }
     }, HOST_BROADCAST_INTERVAL);
     return () => window.clearInterval(id);
-  }, [canControl, playerHandleRef]);
+  }, [isHost, playerHandleRef]);
 
   return { playerState, setPlayerState, broadcastState, setMyStatus, isApplyingRemoteRef };
 }
