@@ -25,8 +25,6 @@ export interface SyncedPlayerHandle {
 interface UseSyncedPlayerArgs {
   roomId: string;
   userId: string;
-  /** any user that may control playback (host or in controllers list) */
-  canControl: boolean;
   /** Only the host writes the canonical state into the rooms table */
   isHost: boolean;
   initialState: PlayerState;
@@ -45,7 +43,6 @@ const HOST_BROADCAST_INTERVAL = 1500;
 export function useSyncedPlayer({
   roomId,
   userId,
-  canControl,
   isHost,
   initialState,
   onBufferingMapChange,
