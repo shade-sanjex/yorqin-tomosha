@@ -25,7 +25,7 @@ function fmtTime(s: number): string {
 }
 
 export const SyncedPlayer = forwardRef<SyncedPlayerHandle, SyncedPlayerProps>(function SyncedPlayer(
-  { state, canControl, onPlay, onPause, onSeek, onProgress, onBuffering, bufferingName },
+  { state, onPlay, onPause, onSeek, onProgress, onBuffering, bufferingName },
   ref
 ) {
   const playerRef = useRef<HTMLVideoElement>(null);
