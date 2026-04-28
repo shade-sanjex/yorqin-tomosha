@@ -403,12 +403,27 @@ function RoomPage() {
       ? profiles[bufferingUserId]?.display_name ?? "Foydalanuvchi"
       : null;
 
+  // Universal playback: anyone in the room can play / pause / seek.
   const onPlayerEvent = {
-    onPlay: () => { if (canControl && !synced.isApplyingRemoteRef.current) synced.broadcastState({ isPlaying: true }); },
-    onPause: () => { if (canControl && !synced.isApplyingRemoteRef.current) synced.broadcastState({ isPlaying: false }); },
-    onSeek: (sec: number) => { if (canControl && !synced.isApplyingRemoteRef.current) synced.broadcastState({ playbackTime: sec }); },
+    onPlay: () => { if (!synced.isApplyingRemoteRef.current) synced.broadcastState({ isPlaying: true }); },
+    onPause: () => { if (!synced.isApplyingRemoteRef.current) synced.broadcastState({ isPlaying: false }); },
+    onSeek: (sec: number) => { if (!synced.isApplyingRemoteRef.current) synced.broadcastState({ playbackTime: sec }); },
     onProgress: (_sec: number) => { /* periodic broadcast handled inside hook */ },
     onBuffering: (b: boolean) => synced.setMyStatus(b ? "yuklanmoqda" : "tayyor"),
+  };
+
+  const handleLocalFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    synced.broadcastState({ videoUrl: url, videoKind: "file", playbackTime: 0, isPlaying: false });
+    toast.success(uz.localFileLoaded);
+    e.target.value = "";
+  };
+
+  const handlePickStream = (url: string, title: string) => {
+    synced.broadcastState({ videoUrl: url, videoKind: "file", playbackTime: 0, isPlaying: false });
+    toast.success(title);
   };
 
   const RoomBody = (
