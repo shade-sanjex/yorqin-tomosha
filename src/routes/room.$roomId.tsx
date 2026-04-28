@@ -261,7 +261,6 @@ function RoomPage() {
   const synced = useSyncedPlayer({
     roomId,
     userId: user?.id ?? "",
-    canControl,
     isHost,
     initialState: initialPlayerState,
     onBufferingMapChange: handleBufferingMap,
