@@ -104,7 +104,7 @@ export const uz = {
   // Moderation
   localMute: "Ovozni o'chirish",
   localUnmute: "Ovozni yoqish",
-  forceMute: "Hammaga ovozini o'chirish",
+  forceMute: "Ovozini o'chirish",
   kick: "Xonadan chetlatish",
   kickedMessage: "Siz xonadan chetlatildingiz",
   mutedByHost: "Yaratuvchi mikrofoningizni o'chirdi",
