@@ -296,7 +296,7 @@ function RoomPage() {
   }, [statusMap]);
 
   const submitVideoUrl = async () => {
-    if (!isHost || !room) return;
+    if (!room) return;
     const trimmed = urlInput.trim();
     let kind: "file" | "youtube" | null = null;
     if (YT_RE.test(trimmed)) kind = "youtube";
@@ -305,19 +305,13 @@ function RoomPage() {
       toast.error(uz.invalidVideoUrl);
       return;
     }
-    if (room.video_storage_path) {
-      await supabase.storage.from("watch_party_media").remove([room.video_storage_path]);
-    }
-    await supabase
-      .from("rooms")
-      .update({
-        video_url: trimmed,
-        video_kind: kind,
-        video_storage_path: null,
-        playback_time: 0,
-        is_playing: false,
-      })
-      .eq("id", roomId);
+    // Broadcast immediately so all participants switch sources right away.
+    synced.broadcastState({
+      videoUrl: trimmed,
+      videoKind: kind,
+      playbackTime: 0,
+      isPlaying: false,
+    });
     setUrlInput("");
     toast.success("Video qo'shildi");
   };
